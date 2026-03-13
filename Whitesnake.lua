@@ -2,8 +2,8 @@ repeat task.wait() until game:IsLoaded()
 
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local HttpService = game:GetService("HttpService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local player = Players.LocalPlayer
 local placeId = game.PlaceId
@@ -11,7 +11,7 @@ local currentJob = game.JobId
 
 task.wait(6)
 
--- Inventory Path
+-- inventory
 local holder = player.PlayerGui
 :WaitForChild("Inventory")
 :WaitForChild("CanvasGroup")
@@ -19,25 +19,25 @@ local holder = player.PlayerGui
 :WaitForChild("enlarging_frame")
 :WaitForChild("holder")
 
--- Stand Data
+-- stand folder
 local liveFolder = workspace:WaitForChild("Live")
 
--- Item Spawn Folder
+-- item folder
 local itemsFolder = workspace:FindFirstChild("Items") or workspace
 
--- Remote
+-- remote
 local useArrow = ReplicatedStorage
 :WaitForChild("requests")
 :WaitForChild("character")
 :WaitForChild("use_item")
 
--- Root
+-- root
 local function getRoot()
     local char = player.Character or player.CharacterAdded:Wait()
     return char:WaitForChild("HumanoidRootPart")
 end
 
--- Summon Stand
+-- summon stand
 local function summonStand()
 
     local char = player.Character or player.CharacterAdded:Wait()
@@ -48,7 +48,7 @@ local function summonStand()
 
 end
 
--- Read Stand
+-- read stand
 local function getStand()
 
     local char = liveFolder:FindFirstChild(player.Name)
@@ -59,7 +59,7 @@ local function getStand()
 
 end
 
--- Use Arrow
+-- use arrow
 local function rollStand()
 
     local args = {"Stand Arrow"}
@@ -67,23 +67,27 @@ local function rollStand()
 
 end
 
--- Arrow Amount
+-- check arrow amount
 local function getArrowAmount()
 
     local slot = holder:FindFirstChild("Stand Arrow")
 
     if slot then
+
         local text = slot.Holder.Holder.Number.Text
         return tonumber(text:match("%d+")) or 0
+
     end
 
     return 0
+
 end
 
--- Find Nearest Arrow
+-- find nearest arrow
 local function getNearestArrow()
 
     local root = getRoot()
+
     local nearest
     local dist = math.huge
 
@@ -98,8 +102,10 @@ local function getNearestArrow()
                 local d = (root.Position - part.Position).Magnitude
 
                 if d < dist then
+
                     dist = d
                     nearest = part
+
                 end
 
             end
@@ -109,9 +115,10 @@ local function getNearestArrow()
     end
 
     return nearest
+
 end
 
--- Collect Arrow
+-- collect arrow
 local function collectArrow(arrow)
 
     local root = getRoot()
@@ -128,46 +135,63 @@ local function collectArrow(arrow)
 
 end
 
-
--- SERVER HOP (Public Only)
+-- SERVER HOP (ANTI 429)
 local function serverHop()
 
+    warn("Server hopping...")
+
+    task.wait(math.random(8,15))
+
     local cursor = ""
-    local foundServer = nil
+    local foundServer
 
     for i = 1,5 do
 
-        local url = "https://games.roblox.com/v1/games/"..placeId.."/servers/Public?sortOrder=Asc&limit=100&cursor="..cursor
+        local success,data = pcall(function()
 
-        local response = game:HttpGet(url)
-        local data = HttpService:JSONDecode(response)
+            local url =
+            "https://games.roblox.com/v1/games/"
+            ..placeId..
+            "/servers/Public?sortOrder=Asc&limit=100&cursor="
+            ..cursor
 
-        for _,server in pairs(data.data) do
+            return HttpService:JSONDecode(game:HttpGet(url))
 
-            if server.playing < server.maxPlayers
-            and server.id ~= currentJob
-            and server.playing > 3 then
+        end)
 
-                foundServer = server.id
-                break
+        if success and data then
+
+            for _,server in pairs(data.data) do
+
+                if server.playing < server.maxPlayers
+                and server.id ~= currentJob then
+
+                    foundServer = server.id
+                    break
+
+                end
 
             end
 
+            if foundServer then break end
+
+            cursor = data.nextPageCursor
+
+            if not cursor then break end
+
+        else
+
+            warn("HTTP 429 blocked waiting 15s")
+            task.wait(15)
+            return serverHop()
+
         end
 
-        if foundServer then break end
-
-        cursor = data.nextPageCursor
-
-        if not cursor then break end
-
-        task.wait(0.2)
+        task.wait(1)
 
     end
 
     if foundServer then
-
-        warn("Teleporting to new public server")
 
         TeleportService:TeleportToPlaceInstance(
             placeId,
@@ -177,8 +201,8 @@ local function serverHop()
 
     else
 
-        warn("Retry server hop...")
-        task.wait(2)
+        warn("Retry hop")
+        task.wait(5)
         serverHop()
 
     end
@@ -186,7 +210,7 @@ local function serverHop()
 end
 
 
--- Check Stand On Join
+-- check stand on join
 local startStand = getStand()
 
 if startStand == "Whitesnake" then
@@ -195,6 +219,7 @@ if startStand == "Whitesnake" then
 end
 
 
+-- main loop
 while task.wait(0.5) do
 
     local arrow = getNearestArrow()
@@ -214,19 +239,21 @@ while task.wait(0.5) do
             task.wait(10)
 
             if getArrowAmount() <= 0 then
+
                 serverHop()
                 break
+
             end
 
         end
 
         rollStand()
 
-        task.wait(2)
+        task.wait(8)
 
         summonStand()
 
-        task.wait(1)
+        task.wait(2)
 
         local stand = getStand()
 
