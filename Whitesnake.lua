@@ -7,11 +7,11 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local player = Players.LocalPlayer
 local placeId = game.PlaceId
-local currentJob = game.JobId
+local jobId = game.JobId
 
-task.wait(6)
+task.wait(5)
 
--- INVENTORY
+-- inventory
 local holder = player.PlayerGui
 :WaitForChild("Inventory")
 :WaitForChild("CanvasGroup")
@@ -19,22 +19,33 @@ local holder = player.PlayerGui
 :WaitForChild("enlarging_frame")
 :WaitForChild("holder")
 
--- STAND DATA
-local liveFolder = workspace:WaitForChild("Live")
+-- stand data
+local live = workspace:WaitForChild("Live")
 
--- REMOTE
+-- remote
 local useItem = ReplicatedStorage
 :WaitForChild("requests")
 :WaitForChild("character")
 :WaitForChild("use_item")
 
--- ROOT
+-- root
 local function getRoot()
     local char = player.Character or player.CharacterAdded:Wait()
     return char:WaitForChild("HumanoidRootPart")
 end
 
--- SUMMON STAND
+-- current stand
+local function getStand()
+
+    local char = live:FindFirstChild(player.Name)
+
+    if char then
+        return char:GetAttribute("SummonedStand")
+    end
+
+end
+
+-- summon stand
 local function summonStand()
 
     local char = player.Character or player.CharacterAdded:Wait()
@@ -43,6 +54,7 @@ local function summonStand()
 
     if controller then
         local remote = controller:FindFirstChild("SummonStand")
+
         if remote then
             remote:FireServer()
         end
@@ -50,109 +62,72 @@ local function summonStand()
 
 end
 
--- GET CURRENT STAND
-local function getStand()
+-- check arrow amount
+local function getArrowAmount()
 
-    local char = liveFolder:FindFirstChild(player.Name)
+    local slot = holder:FindFirstChild("Stand Arrow")
 
-    if char then
-        return char:GetAttribute("SummonedStand")
-    end
-
-end
-
--- INVENTORY COUNT
-local function getItemAmount(name)
-
-    local item = holder:FindFirstChild(name)
-
-    if item then
-        local text = item.Holder.Holder.Number.Text
+    if slot then
+        local text = slot.Holder.Holder.Number.Text
         return tonumber(text:match("%d+")) or 0
     end
 
     return 0
 end
 
--- USE ITEM
-local function useArrow(name)
-
-    local args = {name}
-    useItem:FireServer(unpack(args))
-
+-- use stand arrow
+local function useArrow()
+    useItem:FireServer("Stand Arrow")
 end
 
--- FIND ARROWS IN MAP (METHOD เดิม)
-local function findArrows()
-
-    local arrows = {}
+-- find stand arrow in map (วิธีเดิม)
+local function findArrow()
 
     for _,v in pairs(workspace:GetChildren()) do
 
-        if v:FindFirstChild("Lucky Arrow") then
-            table.insert(arrows, v["Lucky Arrow"])
-        end
-
         if v:FindFirstChild("Stand Arrow") then
-            table.insert(arrows, v["Stand Arrow"])
+            return v["Stand Arrow"]
         end
 
     end
 
-    return arrows
-
 end
 
--- NEAREST ARROW
-local function getNearestArrow()
+-- collect arrow
+local function collectArrow()
 
-    local root = getRoot()
-    local nearest
-    local dist = math.huge
+    local arrow = findArrow()
 
-    for _,arrow in pairs(findArrows()) do
+    if arrow then
 
-        local d = (root.Position - arrow.Position).Magnitude
+        local root = getRoot()
 
-        if d < dist then
-            dist = d
-            nearest = arrow
+        root.CFrame = arrow.CFrame + Vector3.new(0,3,0)
+
+        task.wait(0.4)
+
+        local prompt = arrow:FindFirstChildWhichIsA("ProximityPrompt",true)
+
+        if prompt then
+            fireproximityprompt(prompt)
         end
 
+        return true
     end
 
-    return nearest
-
+    return false
 end
 
--- COLLECT
-local function collectArrow(arrow)
-
-    local root = getRoot()
-
-    root.CFrame = arrow.CFrame + Vector3.new(0,3,0)
-
-    task.wait(0.4)
-
-    local prompt = arrow:FindFirstChildWhichIsA("ProximityPrompt",true)
-
-    if prompt then
-        fireproximityprompt(prompt)
-    end
-
-end
-
--- SERVER HOP
+-- server hop
 local function serverHop()
 
     warn("Server hopping...")
 
-    task.wait(math.random(8,15))
+    task.wait(10)
 
     local cursor = ""
-    local found
 
-    for i = 1,5 do
+    for i=1,5 do
 
         local success,data = pcall(function()
 
@@ -171,110 +146,70 @@ local function serverHop()
             for _,server in pairs(data.data) do
 
                 if server.playing < server.maxPlayers
-                and server.id ~= currentJob then
+                and server.id ~= jobId then
 
-                    found = server.id
-                    break
+                    TeleportService:TeleportToPlaceInstance(
+                        placeId,
+                        server.id,
+                        player
+                    )
 
+                    return
                 end
 
             end
 
-            if found then break end
-
             cursor = data.nextPageCursor
-
             if not cursor then break end
-
-        else
-
-            warn("HTTP 429 wait 15s")
-            task.wait(15)
-            return serverHop()
-
         end
-
-        task.wait(1)
-
-    end
-
-    if found then
-
-        TeleportService:TeleportToPlaceInstance(
-            placeId,
-            found,
-            player
-        )
-
-    else
-
-        task.wait(5)
-        serverHop()
 
     end
 
 end
 
--- CHECK STAND ON JOIN
-local startStand = getStand()
-
-if startStand == "Whitesnake" then
+-- เช็คตอนเข้าเซิร์ฟ
+if getStand() == "Whitesnake" then
     warn("Already Whitesnake")
     return
 end
 
--- MAIN LOOP
-while task.wait(0.5) do
+while task.wait(0.6) do
 
-    local arrow = getNearestArrow()
+    -- เก็บ arrow ในแมพก่อน
+    local collected = collectArrow()
 
-    if arrow then
+    if not collected then
 
-        collectArrow(arrow)
+        -- 🔒 เช็ค Whitesnake ก่อนสุ่มทุกครั้ง
+        local currentStand = getStand()
 
-    else
+        if currentStand == "Whitesnake" then
+            warn("WHITESNAKE FOUND")
+            break
+        end
 
-        local lucky = getItemAmount("Lucky Arrow")
-        local stand = getItemAmount("Stand Arrow")
+        local arrows = getArrowAmount()
 
-        if lucky > 0 then
+        if arrows > 0 then
 
-            useArrow("Lucky Arrow")
+            useArrow()
 
-        elseif stand > 0 then
+            task.wait(2)
 
-            useArrow("Stand Arrow")
+            summonStand()
+
+            task.wait(1)
 
         else
 
-            warn("No arrows waiting 10s")
+            warn("Arrow หมด รอ 10 วิ")
 
             task.wait(10)
 
-            if getItemAmount("Stand Arrow") <= 0
-            and getItemAmount("Lucky Arrow") <= 0 then
-
+            if getArrowAmount() == 0 then
                 serverHop()
                 break
-
             end
-
-        end
-
-        task.wait(2)
-
-        summonStand()
-
-        task.wait(1)
-
-        local current = getStand()
-
-        print("Current Stand:",current)
-
-        if current == "Whitesnake" then
-
-            warn("WHITESNAKE FOUND")
-            break
 
         end
 
