@@ -1,8 +1,8 @@
--- [[ 1. รอโหลดพื้นฐาน ]]
+-- [[ 1. ตั้งค่าพื้นฐานและรอโหลด ]]
 repeat task.wait() until game:IsLoaded()
 repeat task.wait() until game.Players.LocalPlayer.Character
 
-local WEBHOOK_URL = "https://discord.com/api/webhooks/1479380422713409577/fTqx3VvsvwIQTked1qTNEoLQ_HVbaETnRjyEaVlrR0891T-NaMZJCel9zC3XBejPxJ9-" -- ต้องมี https:// นำหน้า
+local WEBHOOK_URL = "https://discord.com/api/webhooks/1479380422713409577/fTqx3VvsvwIQTked1qTNEoLQ_HVbaETnRjyEaVlrR0891T-NaMZJCel9zC3XBejPxJ9-" 
 local FILE_NAME = "Gacha_ID_" .. game.Players.LocalPlayer.UserId .. ".txt"
 
 local rollCount = 0 
@@ -13,7 +13,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TeleportService = game:GetService("TeleportService")
 local player = Players.LocalPlayer
 
--- [[ 2. ระบบจัดการไฟล์ ID Webhook (กันน้ำตก) ]]
+-- [[ 2. ระบบจัดการไฟล์ ID Webhook ]]
 local function saveMsgId(id) if writefile then pcall(function() writefile(FILE_NAME, id) end) end end
 local function loadMsgId() if isfile and isfile(FILE_NAME) then local success, content = pcall(function() return readfile(FILE_NAME) end) return success and content or nil end return nil end
 last_msg_id = loadMsgId()
@@ -33,27 +33,28 @@ local function getAmount(itemName)
     return amount
 end
 
--- [[ 4. ฟังก์ชันวาร์ปเก็บไอเทมทั่วแมพ (Fast Teleport & Collect) ]]
+-- [[ 4. ฟังก์ชันวาร์ปเก็บไอเทม (เจาะลึกเข้าไปใน Model) ]]
 local function teleportToItems()
     local itemFound = false
-    for _, item in pairs(workspace:GetChildren()) do
+    -- ใช้ GetDescendants เพื่อหาลูกธนูที่ซ่อนอยู่ใน Model
+    for _, item in pairs(workspace:GetDescendants()) do
         if item.Name == "Stand Arrow" or item.Name == "Lucky Arrow" then
-            local root = player.Character:FindFirstChild("HumanoidRootPart")
-            if root and (item:FindFirstChild("Handle") or item:IsA("BasePart")) then
+            -- ตรวจสอบว่าต้องเป็น Part ที่เก็บได้ (มี ProximityPrompt)
+            local prompt = item:FindFirstChildOfClass("ProximityPrompt") or item.Parent:FindFirstChildOfClass("ProximityPrompt")
+            
+            if prompt then
                 itemFound = true
-                local targetPart = item:FindFirstChild("Handle") or item
-                print("✨ วาร์ปไปเก็บ: " .. item.Name)
-                
-                -- วาร์ปไปที่ตำแหน่งไอเทมทันที
-                root.CFrame = targetPart.CFrame
-                task.wait(0.3) -- รอระบบฟิสิกส์เล็กน้อย
-                
-                -- กดเก็บผ่าน ProximityPrompt
-                local prompt = item:FindFirstChildWhichIsA("ProximityPrompt", true)
-                if prompt then 
-                    fireproximityprompt(prompt) 
+                local root = player.Character:FindFirstChild("HumanoidRootPart")
+                if root then
+                    -- วาร์ปไปที่ตำแหน่งไอเทม (ใช้ตำแหน่งของตัวไอเทมเอง)
+                    local targetPos = item:IsA("BasePart") and item.CFrame or item.Parent.PrimaryPart.CFrame
+                    print("✨ พบของใน Model! กำลังวาร์ปไปเก็บ: " .. item.Name)
+                    
+                    root.CFrame = targetPos
+                    task.wait(0.3)
+                    fireproximityprompt(prompt)
+                    task.wait(0.5)
                 end
-                task.wait(0.5)
             end
         end
     end
@@ -66,25 +67,23 @@ local function updateWebhook(standName, status)
     local data = {
         ["embeds"] = {{
             ["author"] = {["name"] = "Account: ||" .. player.Name .. "||", ["icon_url"] = "https://www.roblox.com/headshot-thumbnail/image?userId=" .. player.UserId .. "&width=150&height=150&format=png"},
-            ["title"] = "✨ Whitesnake Monitor - Teleport Mode",
+            ["title"] = "✨ Whitesnake Monitor - Deep Scan Mode",
             ["color"] = (status == "SUCCESS") and 0x00ff00 or 0xff8c00,
             ["fields"] = {
                 {["name"] = "🧬 Stand", ["value"] = "**" .. standName .. "**", ["inline"] = true},
                 {["name"] = "📊 Total Rolls", ["value"] = "**" .. rollCount .. "**", ["inline"] = true},
-                {["name"] = "🏹 Inventory", ["value"] = "Arrows: **" .. getAmount("Stand Arrow") .. "**", ["inline"] = false},
-                {["name"] = "🚩 Status", ["value"] = (status == "SUCCESS") and "✅ FOUND!" or "🔄 Searching/Rolling...", ["inline"] = true}
+                {["name"] = "🏹 In Inventory", ["value"] = "Arrows: **" .. getAmount("Stand Arrow") .. "**", ["inline"] = false},
             },
             ["footer"] = {["text"] = "Server: " .. game.JobId:sub(1,8) .. " | " .. os.date("%X")},
         }}
     }
     pcall(function()
         local requestFunc = (syn and syn.request) or (http_request) or (request)
-        local jsonData = HttpService:JSONEncode(data)
         if not last_msg_id then
-            local resp = requestFunc({Url = WEBHOOK_URL .. "?wait=true", Method = "POST", Headers = {["Content-Type"] = "application/json"}, Body = jsonData})
+            local resp = requestFunc({Url = WEBHOOK_URL .. "?wait=true", Method = "POST", Headers = {["Content-Type"] = "application/json"}, Body = HttpService:JSONEncode(data)})
             if resp.Success then last_msg_id = HttpService:JSONDecode(resp.Body).id saveMsgId(last_msg_id) end
         else
-            requestFunc({Url = WEBHOOK_URL .. "/messages/" .. last_msg_id, Method = "PATCH", Headers = {["Content-Type"] = "application/json"}, Body = jsonData})
+            requestFunc({Url = WEBHOOK_URL .. "/messages/" .. last_msg_id, Method = "PATCH", Headers = {["Content-Type"] = "application/json"}, Body = HttpService:JSONEncode(data)})
         end
     end)
 end
@@ -104,7 +103,7 @@ local function hopServer()
     if #servers > 0 then TeleportService:TeleportToPlaceInstance(gameId, servers[math.random(1, #servers)], player) end
 end
 
--- [[ 7. Main Loop ทุก 3 วินาที ]]
+-- [[ 7. Main Logic ตาม Flow ที่คุณต้องการ ]]
 while task.wait(3) do
     local currentStand = "None"
     pcall(function() currentStand = workspace.Live[player.Name]:GetAttribute("SummonedStand") or "None" end)
@@ -112,20 +111,20 @@ while task.wait(3) do
     updateWebhook(currentStand, (currentStand == "Whitesnake") and "SUCCESS" or "ROLLING")
     if currentStand == "Whitesnake" then break end
 
-    -- 1. วาร์ปเก็บของในแมพก่อน
-    local foundAny = teleportToItems()
+    -- 1. เช็คและวาร์ปเก็บของ (Deep Scan)
+    local foundInMap = teleportToItems()
     
-    -- 2. เช็คของในกระเป๋าเพื่อทำการสุ่ม
+    -- 2. เช็คของในกระเป๋า
     local arrows = getAmount("Stand Arrow")
     if arrows > 0 then
         rollCount = rollCount + 1
         ReplicatedStorage.requests.character.use_item:FireServer("Stand Arrow")
-        task.wait(7)
+        task.wait(8) -- รอ 8 วิ ตาม Flow คุณ
         pcall(function() player.Character.client_character_controller.SummonStand:FireServer() end)
         task.wait(2)
-    elseif not foundAny then
-        -- 3. ถ้าหาในแมพก็ไม่เจอ ในตัวก็ไม่มี ถึงจะ Hop
-        print("No items in map or inventory. Hopping...")
+    elseif not foundInMap then
+        -- 3. ถ้าไม่มีจริงทั้งในตัวและในแมพ -> Hop
+        print("Confirmed: No items found anywhere. Hopping...")
         hopServer()
         break
     end
