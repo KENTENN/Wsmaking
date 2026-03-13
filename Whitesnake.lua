@@ -11,7 +11,7 @@ local currentJob = game.JobId
 
 task.wait(6)
 
--- inventory
+-- Inventory Path
 local holder = player.PlayerGui
 :WaitForChild("Inventory")
 :WaitForChild("CanvasGroup")
@@ -19,25 +19,25 @@ local holder = player.PlayerGui
 :WaitForChild("enlarging_frame")
 :WaitForChild("holder")
 
--- live
+-- Stand Data
 local liveFolder = workspace:WaitForChild("Live")
 
--- items
+-- Item Spawn Folder
 local itemsFolder = workspace:FindFirstChild("Items") or workspace
 
--- remote
+-- Remote
 local useArrow = ReplicatedStorage
 :WaitForChild("requests")
 :WaitForChild("character")
 :WaitForChild("use_item")
 
--- root
+-- Root
 local function getRoot()
     local char = player.Character or player.CharacterAdded:Wait()
     return char:WaitForChild("HumanoidRootPart")
 end
 
--- summon stand
+-- Summon Stand
 local function summonStand()
 
     local char = player.Character or player.CharacterAdded:Wait()
@@ -48,7 +48,7 @@ local function summonStand()
 
 end
 
--- get stand
+-- Read Stand
 local function getStand()
 
     local char = liveFolder:FindFirstChild(player.Name)
@@ -59,7 +59,7 @@ local function getStand()
 
 end
 
--- roll arrow
+-- Use Arrow
 local function rollStand()
 
     local args = {"Stand Arrow"}
@@ -67,7 +67,7 @@ local function rollStand()
 
 end
 
--- check arrow amount
+-- Arrow Amount
 local function getArrowAmount()
 
     local slot = holder:FindFirstChild("Stand Arrow")
@@ -80,7 +80,7 @@ local function getArrowAmount()
     return 0
 end
 
--- find nearest arrow
+-- Find Nearest Arrow
 local function getNearestArrow()
 
     local root = getRoot()
@@ -111,7 +111,7 @@ local function getNearestArrow()
     return nearest
 end
 
--- collect arrow
+-- Collect Arrow
 local function collectArrow(arrow)
 
     local root = getRoot()
@@ -128,46 +128,65 @@ local function collectArrow(arrow)
 
 end
 
--- PUBLIC SERVER HOP
+
+-- SERVER HOP (Public Only)
 local function serverHop()
 
-    local servers = {}
+    local cursor = ""
+    local foundServer = nil
 
-    local req = game:HttpGet(
-        "https://games.roblox.com/v1/games/"..placeId.."/servers/Public?sortOrder=Asc&limit=100"
-    )
+    for i = 1,5 do
 
-    local data = HttpService:JSONDecode(req)
+        local url = "https://games.roblox.com/v1/games/"..placeId.."/servers/Public?sortOrder=Asc&limit=100&cursor="..cursor
 
-    for _,server in pairs(data.data) do
+        local response = game:HttpGet(url)
+        local data = HttpService:JSONDecode(response)
 
-        if server.playing < server.maxPlayers
-        and server.id ~= currentJob then
+        for _,server in pairs(data.data) do
 
-            table.insert(servers,server.id)
+            if server.playing < server.maxPlayers
+            and server.id ~= currentJob
+            and server.playing > 3 then
+
+                foundServer = server.id
+                break
+
+            end
 
         end
 
+        if foundServer then break end
+
+        cursor = data.nextPageCursor
+
+        if not cursor then break end
+
+        task.wait(0.2)
+
     end
 
-    if #servers > 0 then
+    if foundServer then
 
-        local target = servers[math.random(1,#servers)]
-
-        warn("Server hopping...")
+        warn("Teleporting to new public server")
 
         TeleportService:TeleportToPlaceInstance(
             placeId,
-            target,
+            foundServer,
             player
         )
+
+    else
+
+        warn("Retry server hop...")
+        task.wait(2)
+        serverHop()
 
     end
 
 end
 
 
--- เช็คตั้งแต่เข้าเซิร์ฟ
+-- Check Stand On Join
 local startStand = getStand()
 
 if startStand == "Whitesnake" then
