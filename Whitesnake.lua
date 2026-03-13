@@ -9,230 +9,135 @@ local player = Players.LocalPlayer
 local placeId = game.PlaceId
 local jobId = game.JobId
 
-task.wait(5)
+task.wait(5) -- รอ UI โหลดชัวร์ๆ
 
--- inventory
-local holder = player.PlayerGui
-:WaitForChild("Inventory")
-:WaitForChild("CanvasGroup")
-:WaitForChild("backpack_frame")
-:WaitForChild("enlarging_frame")
-:WaitForChild("holder")
-
--- stand folder
+-- รายการ Path ที่สำคัญ
+local holder = player.PlayerGui:WaitForChild("Inventory"):WaitForChild("CanvasGroup"):WaitForChild("backpack_frame"):WaitForChild("enlarging_frame"):WaitForChild("holder")
 local live = workspace:WaitForChild("Live")
+local useItem = ReplicatedStorage:WaitForChild("requests"):WaitForChild("character"):WaitForChild("use_item")
 
--- remote
-local useItem = ReplicatedStorage
-:WaitForChild("requests")
-:WaitForChild("character")
-:WaitForChild("use_item")
+-- [ ฟังก์ชันเสริมต่างๆ ] --
 
--- root
 local function getRoot()
     local char = player.Character or player.CharacterAdded:Wait()
     return char:WaitForChild("HumanoidRootPart")
 end
 
--- current stand
 local function getStand()
-
     local char = live:FindFirstChild(player.Name)
-
-    if char then
-        return char:GetAttribute("SummonedStand")
-    end
-
+    return char and char:GetAttribute("SummonedStand") or nil
 end
 
--- summon stand
 local function summonStand()
-
     local char = player.Character or player.CharacterAdded:Wait()
     local controller = char:FindFirstChild("client_character_controller")
-
-    if controller then
-        local remote = controller:FindFirstChild("SummonStand")
-
-        if remote then
-            remote:FireServer()
-        end
+    if controller and controller:FindFirstChild("SummonStand") then
+        controller.SummonStand:FireServer()
     end
-
 end
 
--- arrow count
 local function getArrowAmount()
-
     local slot = holder:FindFirstChild("Stand Arrow")
-
     if slot then
-        local text = slot.Holder.Holder.Number.Text
-        return tonumber(text:match("%d+")) or 0
+        local success, result = pcall(function()
+            return tonumber(slot.Holder.Holder.Number.Text:match("%d+")) or 0
+        end)
+        return success and result or 0
     end
-
     return 0
 end
 
--- use arrow
-local function useArrow()
-    useItem:FireServer("Stand Arrow")
-end
-
--- find arrow in map (วิธีเดิม)
 local function findArrow()
-
     for _,v in pairs(workspace:GetChildren()) do
-
-        if v:FindFirstChild("Stand Arrow") then
-            return v["Stand Arrow"]
-        end
-
+        if v:FindFirstChild("Stand Arrow") then return v["Stand Arrow"] end
     end
-
+    return nil
 end
 
--- collect arrow
 local function collectArrow()
-
     local arrow = findArrow()
-
     if arrow then
-
         local root = getRoot()
-
         root.CFrame = arrow.CFrame + Vector3.new(0,3,0)
-
         task.wait(0.4)
-
-        local prompt = arrow:FindFirstChildWhichIsA("ProximityPrompt",true)
-
-        if prompt then
-            fireproximityprompt(prompt)
-        end
-
+        local prompt = arrow:FindFirstChildWhichIsA("ProximityPrompt", true)
+        if prompt then fireproximityprompt(prompt) end
         return true
     end
-
     return false
 end
 
--- server hop
+local function isWhitesnake()
+    if getStand() == "Whitesnake" then return true end
+    local char = live:FindFirstChild(player.Name)
+    if char then
+        for _, v in pairs(char:GetChildren()) do
+            if v:IsA("Model") and v.Name == "Whitesnake" then return true end
+        end
+    end
+    return false
+end
+
 local function serverHop()
-
-    warn("Server Hop")
-
-    task.wait(10)
-
+    warn("Server Hopping...")
     local cursor = ""
-
-    for i=1,5 do
-
-        local success,data = pcall(function()
-
-            local url =
-            "https://games.roblox.com/v1/games/"
-            ..placeId..
-            "/servers/Public?sortOrder=Asc&limit=100&cursor="
-            ..cursor
-
-            return HttpService:JSONDecode(game:HttpGet(url))
-
+    while true do
+        local success, data = pcall(function()
+            return HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/"..placeId.."/servers/Public?sortOrder=Asc&limit=100&cursor="..cursor))
         end)
-
         if success and data then
-
-            for _,server in pairs(data.data) do
-
-                if server.playing < server.maxPlayers
-                and server.id ~= jobId then
-
-                    TeleportService:TeleportToPlaceInstance(
-                        placeId,
-                        server.id,
-                        player
-                    )
-
+            for _, server in pairs(data.data) do
+                if server.playing < server.maxPlayers and server.id ~= jobId then
+                    TeleportService:TeleportToPlaceInstance(placeId, server.id, player)
                     return
                 end
-
             end
-
             cursor = data.nextPageCursor
             if not cursor then break end
-
-        end
-
+        else break end
+        task.wait(1)
     end
-
 end
 
 --------------------------------------------------
-
--- เช็ค Whitesnake ตอนเข้าเกม
-local startStand = getStand()
-
-if startStand == "Whitesnake" then
-    warn("Already Whitesnake")
-    return
-end
-
+-- [ เริ่มการทำงานหลัก (Main Logic) ] --
 --------------------------------------------------
 
-while task.wait(0.6) do
+if isWhitesnake() then 
+    warn("!!! FOUND WHITESNAKE - SCRIPT STOPPED !!!")
+    return 
+end
 
-    -- เก็บ arrow ในแมพก่อน
-    local collected = collectArrow()
+while task.wait(1) do
+    -- 1. เช็ค Whitesnake ทุกต้นรอบ
+    if isWhitesnake() then break end
 
-    if not collected then
-
+    -- 2. หาและเก็บ Arrow ในแมพก่อนเสมอ
+    if findArrow() then
+        collectArrow()
+        task.wait(1)
+    else
+        -- 3. ถ้าในแมพไม่มี เช็คในกระเป๋า
         local arrows = getArrowAmount()
-
-        -- มี arrow → สุ่ม
         if arrows > 0 then
-
-            useArrow()
-
-            -- ดีเลย์สุ่ม
-            task.wait(8)
-
+            useItem:FireServer("Stand Arrow")
+            task.wait(8) -- เวลากดใช้
+            
+            -- พยายามเรียก Stand ออกมาเช็ค
             summonStand()
-
-            task.wait(1)
-
-            local stand = getStand()
-
-            -- หา antib model
-            local antib
-            local char = live:FindFirstChild(player.Name)
-
-            if char then
-                for _,v in pairs(char:GetChildren()) do
-                    if v:IsA("Model") and v.Name ~= player.Name then
-                        antib = v.Name
-                    end
-                end
-            end
-
-            print("Stand Attribute :",stand)
-            print("Stand Model :",antib)
-
-            if stand == "Whitesnake" or antib == "Whitesnake" then
-                warn("WHITESNAKE FOUND")
+            task.wait(2)
+            
+            if isWhitesnake() then
+                warn("WHITESNAKE FOUND!")
                 break
             end
-
         else
-
-            task.wait(3)
-
+            -- 4. ไม่มีทั้งในแมพและในตัว -> ย้ายเซิร์ฟ
+            task.wait(2)
             if not findArrow() then
                 serverHop()
                 break
             end
-
         end
-
     end
-
 end
