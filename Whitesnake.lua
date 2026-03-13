@@ -9,31 +9,30 @@ local player = Players.LocalPlayer
 local placeId = game.PlaceId
 local jobId = game.JobId
 
-task.wait(5) -- รอ UI โหลดชัวร์ๆ
+print("--- [ Script Started ] ---")
+task.wait(5) 
 
--- รายการ Path ที่สำคัญ
+-- Path Settings
 local holder = player.PlayerGui:WaitForChild("Inventory"):WaitForChild("CanvasGroup"):WaitForChild("backpack_frame"):WaitForChild("enlarging_frame"):WaitForChild("holder")
 local live = workspace:WaitForChild("Live")
 local useItem = ReplicatedStorage:WaitForChild("requests"):WaitForChild("character"):WaitForChild("use_item")
 
--- [ ฟังก์ชันเสริมต่างๆ ] --
-
-local function getRoot()
-    local char = player.Character or player.CharacterAdded:Wait()
-    return char:WaitForChild("HumanoidRootPart")
-end
+-- [ Functions ] --
 
 local function getStand()
     local char = live:FindFirstChild(player.Name)
-    return char and char:GetAttribute("SummonedStand") or nil
+    return char and char:GetAttribute("SummonedStand") or "None"
 end
 
-local function summonStand()
-    local char = player.Character or player.CharacterAdded:Wait()
-    local controller = char:FindFirstChild("client_character_controller")
-    if controller and controller:FindFirstChild("SummonStand") then
-        controller.SummonStand:FireServer()
+local function isWhitesnake()
+    if getStand() == "Whitesnake" then return true end
+    local char = live:FindFirstChild(player.Name)
+    if char then
+        for _, v in pairs(char:GetChildren()) do
+            if v:IsA("Model") and v.Name == "Whitesnake" then return true end
+        end
     end
+    return false
 end
 
 local function getArrowAmount()
@@ -54,32 +53,9 @@ local function findArrow()
     return nil
 end
 
-local function collectArrow()
-    local arrow = findArrow()
-    if arrow then
-        local root = getRoot()
-        root.CFrame = arrow.CFrame + Vector3.new(0,3,0)
-        task.wait(0.4)
-        local prompt = arrow:FindFirstChildWhichIsA("ProximityPrompt", true)
-        if prompt then fireproximityprompt(prompt) end
-        return true
-    end
-    return false
-end
-
-local function isWhitesnake()
-    if getStand() == "Whitesnake" then return true end
-    local char = live:FindFirstChild(player.Name)
-    if char then
-        for _, v in pairs(char:GetChildren()) do
-            if v:IsA("Model") and v.Name == "Whitesnake" then return true end
-        end
-    end
-    return false
-end
-
 local function serverHop()
-    warn("Server Hopping...")
+    warn("!!! Status: Arrows ran out. Preparing to Server Hop...")
+    task.wait(2)
     local cursor = ""
     while true do
         local success, data = pcall(function()
@@ -88,56 +64,78 @@ local function serverHop()
         if success and data then
             for _, server in pairs(data.data) do
                 if server.playing < server.maxPlayers and server.id ~= jobId then
+                    print("Found new server: " .. server.id)
                     TeleportService:TeleportToPlaceInstance(placeId, server.id, player)
                     return
                 end
             end
             cursor = data.nextPageCursor
             if not cursor then break end
-        else break end
-        task.wait(1)
+        end
+        task.wait(0.5)
     end
 end
 
 --------------------------------------------------
--- [ เริ่มการทำงานหลัก (Main Logic) ] --
+-- [ Main Logic ] --
 --------------------------------------------------
 
+-- 1. เช็คตอนเริ่มเกม
+print("Status: Checking current stand...")
 if isWhitesnake() then 
-    warn("!!! FOUND WHITESNAKE - SCRIPT STOPPED !!!")
+    warn("Found Whitesnake! Stopping script.")
     return 
 end
+print("Current Stand: " .. getStand() .. " | Status: Searching for Arrows...")
 
 while task.wait(1) do
-    -- 1. เช็ค Whitesnake ทุกต้นรอบ
-    if isWhitesnake() then break end
+    -- เช็ค Whitesnake ทุกต้นรอบ
+    if isWhitesnake() then 
+        warn("Success: Whitesnake Obtained!")
+        break 
+    end
 
-    -- 2. หาและเก็บ Arrow ในแมพก่อนเสมอ
-    if findArrow() then
-        collectArrow()
-        task.wait(1)
+    -- 2. เช็คในแมพ
+    local arrowInMap = findArrow()
+    if arrowInMap then
+        print("Action: Found Arrow in world! Teleporting to collect...")
+        local char = player.Character or player.CharacterAdded:Wait()
+        local root = char:WaitForChild("HumanoidRootPart")
+        root.CFrame = arrowInMap.CFrame + Vector3.new(0, 3, 0)
+        
+        task.wait(0.5)
+        local prompt = arrowInMap:FindFirstChildWhichIsA("ProximityPrompt", true)
+        if prompt then 
+            fireproximityprompt(prompt)
+            print("Status: Collected arrow from map.")
+        end
+        task.wait(1.5)
+        
     else
-        -- 3. ถ้าในแมพไม่มี เช็คในกระเป๋า
-        local arrows = getArrowAmount()
-        if arrows > 0 then
+        -- 3. เช็คในกระเป๋า
+        local arrowsInInv = getArrowAmount()
+        if arrowsInInv > 0 then
+            print("Action: No arrows in map. Using Arrow from inventory (Remaining: " .. arrowsInInv .. ")")
             useItem:FireServer("Stand Arrow")
-            task.wait(8) -- เวลากดใช้
             
-            -- พยายามเรียก Stand ออกมาเช็ค
-            summonStand()
-            task.wait(2)
+            print("Status: Waiting 8 seconds for animation...")
+            task.wait(8)
             
-            if isWhitesnake() then
-                warn("WHITESNAKE FOUND!")
-                break
+            print("Action: Summoning Stand to check result...")
+            local char = player.Character or player.CharacterAdded:Wait()
+            local controller = char:FindFirstChild("client_character_controller")
+            if controller and controller:FindFirstChild("SummonStand") then
+                controller.SummonStand:FireServer()
             end
+            
+            task.wait(2)
+            print("Result: Current Stand is " .. getStand())
+            
         else
-            -- 4. ไม่มีทั้งในแมพและในตัว -> ย้ายเซิร์ฟ
-            task.wait(2)
-            if not findArrow() then
-                serverHop()
-                break
-            end
+            -- 4. ไม่มีของเลย
+            print("Status: No arrows in world or inventory.")
+            serverHop()
+            break
         end
     end
 end
