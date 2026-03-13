@@ -19,10 +19,8 @@ local holder = player.PlayerGui
 :WaitForChild("enlarging_frame")
 :WaitForChild("holder")
 
--- stand data
 local live = workspace:WaitForChild("Live")
 
--- remote
 local useItem = ReplicatedStorage
 :WaitForChild("requests")
 :WaitForChild("character")
@@ -49,12 +47,10 @@ end
 local function summonStand()
 
     local char = player.Character or player.CharacterAdded:Wait()
-
     local controller = char:FindFirstChild("client_character_controller")
 
     if controller then
         local remote = controller:FindFirstChild("SummonStand")
-
         if remote then
             remote:FireServer()
         end
@@ -62,7 +58,7 @@ local function summonStand()
 
 end
 
--- check arrow amount
+-- arrow count
 local function getArrowAmount()
 
     local slot = holder:FindFirstChild("Stand Arrow")
@@ -75,12 +71,12 @@ local function getArrowAmount()
     return 0
 end
 
--- use stand arrow
+-- use arrow
 local function useArrow()
     useItem:FireServer("Stand Arrow")
 end
 
--- find stand arrow in map (วิธีเดิม)
+-- find arrow in map
 local function findArrow()
 
     for _,v in pairs(workspace:GetChildren()) do
@@ -121,7 +117,7 @@ end
 -- server hop
 local function serverHop()
 
-    warn("Server hopping...")
+    warn("Server Hop")
 
     task.wait(10)
 
@@ -161,52 +157,60 @@ local function serverHop()
 
             cursor = data.nextPageCursor
             if not cursor then break end
+
         end
 
     end
 
 end
 
--- เช็คตอนเข้าเซิร์ฟ
+------------------------------------------------
+
+-- 1️⃣ เช็ค Whitesnake ตอนเข้าเกม
+
 if getStand() == "Whitesnake" then
     warn("Already Whitesnake")
     return
 end
 
+------------------------------------------------
+
 while task.wait(0.6) do
 
-    -- เก็บ arrow ในแมพก่อน
+    -- 2️⃣ หา Arrow ในแมพ
     local collected = collectArrow()
 
     if not collected then
 
-        -- 🔒 เช็ค Whitesnake ก่อนสุ่มทุกครั้ง
-        local currentStand = getStand()
-
-        if currentStand == "Whitesnake" then
-            warn("WHITESNAKE FOUND")
-            break
-        end
-
         local arrows = getArrowAmount()
 
+        -- 3️⃣ ถ้ามี Arrow → สุ่ม
         if arrows > 0 then
 
             useArrow()
 
-            task.wait(2)
+            task.wait(1)
 
             summonStand()
 
-            task.wait(1)
+            -- ดีเลย์สุ่ม
+            task.wait(8)
+
+            local stand = getStand()
+
+            print("Stand:",stand)
+
+            if stand == "Whitesnake" then
+                warn("WHITESNAKE FOUND")
+                break
+            end
 
         else
 
-            warn("Arrow หมด รอ 10 วิ")
+            -- 4️⃣ Arrow หมด → ลองหาในแมพอีกครั้ง
+            task.wait(3)
 
-            task.wait(10)
-
-            if getArrowAmount() == 0 then
+            if not findArrow() then
                 serverHop()
                 break
             end
