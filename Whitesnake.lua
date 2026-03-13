@@ -3,6 +3,7 @@ repeat task.wait() until game:IsLoaded()
 -- [[ ตั้งค่า WEBHOOK ตรงนี้ ]] --
 local WEBHOOK_URL = "https://discord.com/api/webhooks/1479380422713409577/fTqx3VvsvwIQTked1qTNEoLQ_HVbaETnRjyEaVlrR0891T-NaMZJCel9zC3XBejPxJ9-" 
 local last_msg_id = nil 
+local rollCount = 0 -- ตัวนับจำนวนครั้งที่สุ่ม
 
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
@@ -20,14 +21,10 @@ local useItem = ReplicatedStorage:WaitForChild("requests"):WaitForChild("charact
 
 -- [[ ฟังก์ชันเสริม ]] --
 
-local function getRoot()
-    local char = player.Character or player.CharacterAdded:Wait()
-    return char:WaitForChild("HumanoidRootPart")
-end
-
 local function getStand()
     local char = live:FindFirstChild(player.Name)
-    return char and char:GetAttribute("SummonedStand") or "None"
+    local val = char and char:GetAttribute("SummonedStand")
+    return (val and val ~= "") and val or "None"
 end
 
 local function isWhitesnake()
@@ -41,33 +38,33 @@ local function isWhitesnake()
     return false
 end
 
--- ฟังก์ชันดึงจำนวนไอเทมแบบปลอดภัย (ป้องกัน nil)
 local function getItemAmount(itemName)
     local slot = holder:FindFirstChild(itemName)
     if slot then
         local success, result = pcall(function()
-            local text = slot.Holder.Holder.Number.Text
-            return text:match("%d+") or "0"
+            return slot.Holder.Holder.Number.Text:match("%d+") or "0"
         end)
         return success and result or "0"
     end
     return "0"
 end
 
--- [[ ฟังก์ชัน Webhook แบบ Update ข้อความเดิม ]] --
+-- [[ Webhook Update (เพิ่ม Roll Count ใน Field) ]] --
 local function sendWebhookUpdate(standName, status)
+    if not WEBHOOK_URL or WEBHOOK_URL == "" or not WEBHOOK_URL:find("http") then return end
+
     local arrowCount = getItemAmount("Stand Arrow")
     local luckyCount = getItemAmount("Lucky Arrow")
     
     local data = {
         ["embeds"] = {{
             ["title"] = "✨ Stand Gacha Live Monitor",
-            ["description"] = "กำลังอัปเดตสถานะการฟาร์มแบบ Real-time",
             ["color"] = (status == "SUCCESS") and 0x00ff00 or 0xff8c00,
             ["fields"] = {
                 {["name"] = "👤 Player", ["value"] = "||" .. player.Name .. "||", ["inline"] = true},
                 {["name"] = "🧬 Current Stand", ["value"] = "**" .. standName .. "**", ["inline"] = true},
-                {["name"] = "🏹 Inventory", ["value"] = "Stand Arrows: **" .. arrowCount .. "**\nLucky Arrows: **" .. luckyCount .. "**", ["inline"] = false},
+                {["name"] = "📊 Statistics", ["value"] = "Total Rolls: **" .. rollCount .. "**", ["inline"] = true},
+                {["name"] = "🏹 Inventory", ["value"] = "Stand Arrows: **" .. arrowCount .. "** | Lucky Arrows: **" .. luckyCount .. "**", ["inline"] = false},
                 {["name"] = "🚩 Status", ["value"] = (status == "SUCCESS") and "✅ **FOUND WHITESNAKE!**" or "🔄 **Rolling...**", ["inline"] = true}
             },
             ["footer"] = {["text"] = "Server: " .. jobId .. " | Last Update: " .. os.date("%X")},
@@ -75,29 +72,18 @@ local function sendWebhookUpdate(standName, status)
         }}
     }
 
-    local jsonData = HttpService:JSONEncode(data)
-    local requestFunc = (syn and syn.request) or (http_request) or (request)
-    
-    if not last_msg_id then
-        local response = requestFunc({
-            Url = WEBHOOK_URL .. "?wait=true",
-            Method = "POST",
-            Headers = {["Content-Type"] = "application/json"},
-            Body = jsonData
-        })
-        if response and response.Success then
-            local decoded = HttpService:JSONDecode(response.Body)
-            last_msg_id = decoded.id
+    pcall(function()
+        local requestFunc = (syn and syn.request) or (http_request) or (request)
+        if not last_msg_id then
+            local resp = requestFunc({Url = WEBHOOK_URL .. "?wait=true", Method = "POST", Headers = {["Content-Type"] = "application/json"}, Body = HttpService:JSONEncode(data)})
+            if resp.Success then last_msg_id = HttpService:JSONDecode(resp.Body).id end
+        else
+            requestFunc({Url = WEBHOOK_URL .. "/messages/" .. last_msg_id, Method = "PATCH", Headers = {["Content-Type"] = "application/json"}, Body = HttpService:JSONEncode(data)})
         end
-    else
-        requestFunc({
-            Url = WEBHOOK_URL .. "/messages/" .. last_msg_id,
-            Method = "PATCH",
-            Headers = {["Content-Type"] = "application/json"},
-            Body = jsonData
-        })
-    end
+    end)
 end
+
+-- [[ Logic ฟาร์ม ]] --
 
 local function findArrow()
     for _,v in pairs(workspace:GetChildren()) do
@@ -109,7 +95,8 @@ end
 local function collectArrow()
     local arrow = findArrow()
     if arrow then
-        local root = getRoot()
+        local char = player.Character or player.CharacterAdded:Wait()
+        local root = char:WaitForChild("HumanoidRootPart")
         root.CFrame = arrow.CFrame + Vector3.new(0, 3, 0)
         task.wait(0.5)
         local prompt = arrow:FindFirstChildWhichIsA("ProximityPrompt", true)
@@ -120,7 +107,7 @@ local function collectArrow()
 end
 
 local function serverHop()
-    warn("Arrows/Items ran out. Hopping to new server...")
+    print("No items left. Hopping...")
     local cursor = ""
     while true do
         local success, data = pcall(function()
@@ -140,41 +127,34 @@ local function serverHop()
     end
 end
 
--- [[ Main Logic ]] --
+-- [[ Main Execution ]] --
 
-print("--- [ Full Script Started ] ---")
 task.wait(5)
-
--- เช็คตอนเริ่ม
 if isWhitesnake() then
     sendWebhookUpdate(getStand(), "SUCCESS")
     return
 end
 
 while task.wait(1) do
-    -- 1. เช็คเป้าหมายก่อนทุกครั้ง
     if isWhitesnake() then
         sendWebhookUpdate(getStand(), "SUCCESS")
-        warn("FOUND WHITESNAKE!")
         break
     end
 
-    -- 2. หาในแมพก่อน
     local arrowInMap = findArrow()
     if arrowInMap then
-        print("Action: Found Arrow in Map, Collecting...")
         collectArrow()
         task.wait(2)
     else
-        -- 3. ถ้าในแมพไม่มี เช็คในตัว
         local arrowAmt = tonumber(getItemAmount("Stand Arrow")) or 0
         if arrowAmt > 0 then
-            print("Action: Using Arrow from Inventory (Left: " .. arrowAmt .. ")")
+            -- เพิ่มจำนวน Roll เมื่อกดใช้
+            rollCount = rollCount + 1
+            print("Rolling... Count: " .. rollCount)
+            
             useItem:FireServer("Stand Arrow")
+            task.wait(8)
             
-            task.wait(8) -- เวลากดใช้
-            
-            -- เรียก Stand
             local char = player.Character or player.CharacterAdded:Wait()
             local controller = char:FindFirstChild("client_character_controller")
             if controller and controller:FindFirstChild("SummonStand") then
@@ -183,17 +163,10 @@ while task.wait(1) do
             
             task.wait(2)
             local res = getStand()
-            print("Result: " .. res)
+            sendWebhookUpdate(res, isWhitesnake() and "SUCCESS" or "ROLLING")
             
-            -- อัปเดต Discord (Edit ข้อความเดิม)
-            if isWhitesnake() then
-                sendWebhookUpdate(res, "SUCCESS")
-                break
-            else
-                sendWebhookUpdate(res, "ROLLING")
-            end
+            if isWhitesnake() then break end
         else
-            -- 4. ไม่มีของเลยจริงๆ
             task.wait(2)
             if not findArrow() then
                 serverHop()
