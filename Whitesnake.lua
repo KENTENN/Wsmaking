@@ -4,78 +4,36 @@ local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
 local player = Players.LocalPlayer
 
--- Remote ใช้ลูกธนู
 local useArrow = game:GetService("ReplicatedStorage")
 :WaitForChild("requests")
 :WaitForChild("character")
 :WaitForChild("use_item")
 
--- inventory
-local holder = player.PlayerGui
-:WaitForChild("Inventory")
-:WaitForChild("CanvasGroup")
-:WaitForChild("backpack_frame")
-:WaitForChild("enlarging_frame")
-:WaitForChild("holder")
-
--- หา HumanoidRootPart
 local function getRoot()
     local char = player.Character or player.CharacterAdded:Wait()
     return char:WaitForChild("HumanoidRootPart")
 end
 
--- เช็คจำนวน Stand Arrow
-local function getStandArrow()
+-- เรียก Stand
+local function summonStand()
 
-    local slot = holder:FindFirstChild("Stand Arrow")
+    local char = player.Character or player.CharacterAdded:Wait()
 
-    if slot then
-        local text = slot.Holder.Holder.Number.Text
-        local amount = tonumber(text:match("%d+")) or 0
-        return amount
-    end
+    char:WaitForChild("client_character_controller")
+    :WaitForChild("SummonStand")
+    :FireServer()
 
-    return 0
 end
 
--- หา Stand Arrow ในแมพ
-local function getNearestArrow()
+-- อ่านชื่อ Stand
+local function getStand()
 
-    local root = getRoot()
-    local nearest = nil
-    local dist = math.huge
+    local live = workspace:WaitForChild("Live")
 
-    for _,v in pairs(workspace:GetDescendants()) do
+    local char = live:FindFirstChild(player.Name)
 
-        if v.Name == "Stand Arrow" and v:IsA("BasePart") then
-
-            local d = (root.Position - v.Position).Magnitude
-
-            if d < dist then
-                dist = d
-                nearest = v
-            end
-
-        end
-
-    end
-
-    return nearest
-end
-
--- เก็บ Arrow
-local function collectArrow(arrow)
-
-    local root = getRoot()
-
-    root.CFrame = arrow.CFrame + Vector3.new(0,3,0)
-
-    task.wait(0.4)
-
-    local prompt = arrow:FindFirstChildWhichIsA("ProximityPrompt",true)
-
-    if prompt then
-        fireproximityprompt(prompt)
+    if char then
+        return char:GetAttribute("SummonedStand")
     end
 
 end
@@ -88,21 +46,6 @@ local function rollStand()
 
 end
 
--- เช็ค Stand ที่ได้
-local function getStand()
-
-    local effects = workspace:FindFirstChild("Effects")
-
-    if effects then
-        local stand = effects:FindFirstChild(player.Name.."'s Stand")
-
-        if stand then
-            return stand:GetAttribute("Stand")
-        end
-    end
-
-end
-
 -- server hop
 local function serverHop()
 
@@ -110,43 +53,41 @@ local function serverHop()
 
 end
 
+while task.wait(2) do
 
-while task.wait(1) do
+    local amount = 0
 
-    local arrow = getNearestArrow()
+    local slot = player.PlayerGui.Inventory.CanvasGroup.backpack_frame.enlarging_frame.holder:FindFirstChild("Stand Arrow")
 
-    -- มี Arrow ในแมพ
-    if arrow then
+    if slot then
+        local text = slot.Holder.Holder.Number.Text
+        amount = tonumber(text:match("%d+")) or 0
+    end
 
-        collectArrow(arrow)
+    if amount <= 0 then
+        warn("No Arrow -> Server Hop")
+        serverHop()
+        break
+    end
 
-    else
+    -- ใช้ Arrow
+    rollStand()
 
-        -- ไม่มี Arrow ในแมพ
-        local amount = getStandArrow()
+    task.wait(2)
 
-        if amount > 0 then
+    -- เรียก Stand
+    summonStand()
 
-            rollStand()
+    task.wait(1)
 
-            task.wait(2)
+    local stand = getStand()
 
-            local stand = getStand()
+    print("Stand:",stand)
 
-            print("Current Stand:",stand)
+    if stand == "Whitesnake" then
 
-            if stand == "Whitesnake" then
-                warn("GOT WHITESNAKE")
-                break
-            end
-
-        else
-
-            warn("No Arrow -> Server Hop")
-
-            serverHop()
-
-        end
+        warn("GOT WHITESNAKE")
+        break
 
     end
 
