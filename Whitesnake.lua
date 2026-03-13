@@ -19,8 +19,10 @@ local holder = player.PlayerGui
 :WaitForChild("enlarging_frame")
 :WaitForChild("holder")
 
+-- stand folder
 local live = workspace:WaitForChild("Live")
 
+-- remote
 local useItem = ReplicatedStorage
 :WaitForChild("requests")
 :WaitForChild("character")
@@ -51,6 +53,7 @@ local function summonStand()
 
     if controller then
         local remote = controller:FindFirstChild("SummonStand")
+
         if remote then
             remote:FireServer()
         end
@@ -76,7 +79,7 @@ local function useArrow()
     useItem:FireServer("Stand Arrow")
 end
 
--- find arrow in map
+-- find arrow in map (วิธีเดิม)
 local function findArrow()
 
     for _,v in pairs(workspace:GetChildren()) do
@@ -164,50 +167,63 @@ local function serverHop()
 
 end
 
-------------------------------------------------
+--------------------------------------------------
 
--- 1️⃣ เช็ค Whitesnake ตอนเข้าเกม
+-- เช็ค Whitesnake ตอนเข้าเกม
+local startStand = getStand()
 
-if getStand() == "Whitesnake" then
+if startStand == "Whitesnake" then
     warn("Already Whitesnake")
     return
 end
 
-------------------------------------------------
+--------------------------------------------------
 
 while task.wait(0.6) do
 
-    -- 2️⃣ หา Arrow ในแมพ
+    -- เก็บ arrow ในแมพก่อน
     local collected = collectArrow()
 
     if not collected then
 
         local arrows = getArrowAmount()
 
-        -- 3️⃣ ถ้ามี Arrow → สุ่ม
+        -- มี arrow → สุ่ม
         if arrows > 0 then
 
             useArrow()
 
-            task.wait(1)
-
-            summonStand()
-
             -- ดีเลย์สุ่ม
             task.wait(8)
 
+            summonStand()
+
+            task.wait(1)
+
             local stand = getStand()
 
-            print("Stand:",stand)
+            -- หา antib model
+            local antib
+            local char = live:FindFirstChild(player.Name)
 
-            if stand == "Whitesnake" then
+            if char then
+                for _,v in pairs(char:GetChildren()) do
+                    if v:IsA("Model") and v.Name ~= player.Name then
+                        antib = v.Name
+                    end
+                end
+            end
+
+            print("Stand Attribute :",stand)
+            print("Stand Model :",antib)
+
+            if stand == "Whitesnake" or antib == "Whitesnake" then
                 warn("WHITESNAKE FOUND")
                 break
             end
 
         else
 
-            -- 4️⃣ Arrow หมด → ลองหาในแมพอีกครั้ง
             task.wait(3)
 
             if not findArrow() then
