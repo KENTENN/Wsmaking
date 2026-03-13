@@ -3,8 +3,11 @@ repeat task.wait() until game:IsLoaded()
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local HttpService = game:GetService("HttpService")
 
 local player = Players.LocalPlayer
+local placeId = game.PlaceId
+local currentJob = game.JobId
 
 task.wait(6)
 
@@ -16,10 +19,10 @@ local holder = player.PlayerGui
 :WaitForChild("enlarging_frame")
 :WaitForChild("holder")
 
--- live folder
+-- live
 local liveFolder = workspace:WaitForChild("Live")
 
--- item folder (สำคัญมาก เร็วกว่า scan ทั้งแมพ)
+-- items
 local itemsFolder = workspace:FindFirstChild("Items") or workspace
 
 -- remote
@@ -28,11 +31,13 @@ local useArrow = ReplicatedStorage
 :WaitForChild("character")
 :WaitForChild("use_item")
 
+-- root
 local function getRoot()
     local char = player.Character or player.CharacterAdded:Wait()
     return char:WaitForChild("HumanoidRootPart")
 end
 
+-- summon stand
 local function summonStand()
 
     local char = player.Character or player.CharacterAdded:Wait()
@@ -43,6 +48,7 @@ local function summonStand()
 
 end
 
+-- get stand
 local function getStand()
 
     local char = liveFolder:FindFirstChild(player.Name)
@@ -53,6 +59,7 @@ local function getStand()
 
 end
 
+-- roll arrow
 local function rollStand()
 
     local args = {"Stand Arrow"}
@@ -60,6 +67,7 @@ local function rollStand()
 
 end
 
+-- check arrow amount
 local function getArrowAmount()
 
     local slot = holder:FindFirstChild("Stand Arrow")
@@ -72,11 +80,11 @@ local function getArrowAmount()
     return 0
 end
 
--- หา Arrow ที่ใกล้ที่สุด (เฉพาะ Items folder)
+-- find nearest arrow
 local function getNearestArrow()
 
     local root = getRoot()
-    local nearest = nil
+    local nearest
     local dist = math.huge
 
     for _,v in pairs(itemsFolder:GetChildren()) do
@@ -103,7 +111,7 @@ local function getNearestArrow()
     return nearest
 end
 
-
+-- collect arrow
 local function collectArrow(arrow)
 
     local root = getRoot()
@@ -120,16 +128,46 @@ local function collectArrow(arrow)
 
 end
 
-
+-- PUBLIC SERVER HOP
 local function serverHop()
 
-    warn("Server hopping...")
-    TeleportService:Teleport(game.PlaceId)
+    local servers = {}
+
+    local req = game:HttpGet(
+        "https://games.roblox.com/v1/games/"..placeId.."/servers/Public?sortOrder=Asc&limit=100"
+    )
+
+    local data = HttpService:JSONDecode(req)
+
+    for _,server in pairs(data.data) do
+
+        if server.playing < server.maxPlayers
+        and server.id ~= currentJob then
+
+            table.insert(servers,server.id)
+
+        end
+
+    end
+
+    if #servers > 0 then
+
+        local target = servers[math.random(1,#servers)]
+
+        warn("Server hopping...")
+
+        TeleportService:TeleportToPlaceInstance(
+            placeId,
+            target,
+            player
+        )
+
+    end
 
 end
 
 
--- เช็คตอนเข้าเซิร์ฟก่อน
+-- เช็คตั้งแต่เข้าเซิร์ฟ
 local startStand = getStand()
 
 if startStand == "Whitesnake" then
@@ -152,7 +190,7 @@ while task.wait(0.5) do
 
         if amount <= 0 then
 
-            warn("Arrow empty, waiting 10 seconds")
+            warn("Arrow empty waiting 10s")
 
             task.wait(10)
 
