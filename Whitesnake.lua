@@ -2,13 +2,26 @@ repeat task.wait() until game:IsLoaded()
 
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
 local player = Players.LocalPlayer
 
-local useArrow = game:GetService("ReplicatedStorage")
+-- รอโฟลเดอร์สำคัญ
+local inventory = player.PlayerGui:WaitForChild("Inventory")
+local canvas = inventory:WaitForChild("CanvasGroup")
+local backpack = canvas:WaitForChild("backpack_frame")
+local enlarge = backpack:WaitForChild("enlarging_frame")
+local holder = enlarge:WaitForChild("holder")
+
+local liveFolder = workspace:WaitForChild("Live")
+
+-- Remote
+local useArrow = ReplicatedStorage
 :WaitForChild("requests")
 :WaitForChild("character")
 :WaitForChild("use_item")
 
+-- หา HumanoidRootPart
 local function getRoot()
     local char = player.Character or player.CharacterAdded:Wait()
     return char:WaitForChild("HumanoidRootPart")
@@ -25,12 +38,10 @@ local function summonStand()
 
 end
 
--- อ่านชื่อ Stand
+-- อ่าน Stand
 local function getStand()
 
-    local live = workspace:WaitForChild("Live")
-
-    local char = live:FindFirstChild(player.Name)
+    local char = liveFolder:FindFirstChild(player.Name)
 
     if char then
         return char:GetAttribute("SummonedStand")
@@ -46,28 +57,45 @@ local function rollStand()
 
 end
 
--- server hop
+-- เช็คจำนวน Arrow
+local function getArrowAmount()
+
+    local slot = holder:FindFirstChild("Stand Arrow")
+
+    if slot then
+        local text = slot.Holder.Holder.Number.Text
+        return tonumber(text:match("%d+")) or 0
+    end
+
+    return 0
+end
+
+-- Server Hop
 local function serverHop()
 
+    warn("Server hopping...")
     TeleportService:Teleport(game.PlaceId)
 
 end
 
+
 while task.wait(2) do
 
-    local amount = 0
+    local amount = getArrowAmount()
 
-    local slot = player.PlayerGui.Inventory.CanvasGroup.backpack_frame.enlarging_frame.holder:FindFirstChild("Stand Arrow")
-
-    if slot then
-        local text = slot.Holder.Holder.Number.Text
-        amount = tonumber(text:match("%d+")) or 0
-    end
-
+    -- Arrow หมด
     if amount <= 0 then
-        warn("No Arrow -> Server Hop")
-        serverHop()
-        break
+
+        warn("Arrow empty, waiting 10 seconds before hop")
+
+        task.wait(10)
+
+        -- เช็คอีกครั้งกันบัค GUI
+        if getArrowAmount() <= 0 then
+            serverHop()
+            break
+        end
+
     end
 
     -- ใช้ Arrow
@@ -82,7 +110,7 @@ while task.wait(2) do
 
     local stand = getStand()
 
-    print("Stand:",stand)
+    print("Current Stand:", stand)
 
     if stand == "Whitesnake" then
 
