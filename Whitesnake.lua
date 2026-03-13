@@ -1,4 +1,4 @@
--- [[ 1. ระบบรอโหลดเกมและตั้งค่า ]]
+-- [[ 1. ระบบรอโหลดเกมและตั้งค่าพื้นฐาน ]]
 repeat task.wait() until game:IsLoaded()
 
 local WEBHOOK_URL = "https://discord.com/api/webhooks/1479380422713409577/fTqx3VvsvwIQTked1qTNEoLQ_HVbaETnRjyEaVlrR0891T-NaMZJCel9zC3XBejPxJ9-" 
@@ -27,7 +27,7 @@ end
 
 last_msg_id = loadMsgId()
 
--- [[ 3. ฟังก์ชันดึงข้อมูลไอเทมและสแตนด์ ]]
+-- [[ 3. ฟังก์ชันดึงข้อมูลแบบปลอดภัย (Anti-Nil) ]]
 local function getAmount(itemName)
     local success, result = pcall(function()
         local holder = player.PlayerGui.Inventory.CanvasGroup.backpack_frame.enlarging_frame.holder
@@ -43,7 +43,7 @@ local function getStand()
     return (val and val ~= "") and val or "None"
 end
 
--- [[ 4. ระบบ Webhook (Admin Only + Icon + Live Update) ]]
+-- [[ 4. ระบบ Webhook Update (Admin Only + Icon + Live Stats) ]]
 local function updateWebhook(standName, status)
     if not WEBHOOK_URL or not WEBHOOK_URL:find("http") then return end
 
@@ -52,8 +52,8 @@ local function updateWebhook(standName, status)
     local data = {
         ["embeds"] = {{
             ["author"] = {
-                ["name"] = "Account: ||" .. player.Name .. "||", -- Admin Only (Spoiler)
-                ["icon_url"] = headshotUrl -- Character Icon
+                ["name"] = "Account: ||" .. player.Name .. "||", -- แอดมินดูได้เท่านั้น
+                ["icon_url"] = headshotUrl -- ไอคอนหน้าตัวละคร
             },
             ["title"] = "✨ Whitesnake Gacha Monitor",
             ["color"] = (status == "SUCCESS") and 0x00ff00 or 0xff8c00,
@@ -83,53 +83,45 @@ local function updateWebhook(standName, status)
     end)
 end
 
--- [[ 5. ฟังก์ชันการสุ่ม (Auto Roll) ]]
+-- [[ 5. ฟังก์ชันการสุ่มอัตโนมัติ ]]
 local function autoRoll()
     local useItem = ReplicatedStorage:WaitForChild("requests"):WaitForChild("character"):WaitForChild("use_item")
-    
-    -- ตรวจสอบจำนวนลูกธนู
     local arrowStr = getAmount("Stand Arrow")
     local arrowAmt = tonumber(arrowStr:match("%d+")) or 0
 
     if arrowAmt > 0 then
-        rollCount = rollCount + 1 -- นับจำนวนครั้งที่สุ่ม
-        print("Rolling... Total: " .. rollCount)
-        
-        -- กดใช้ Arrow
+        rollCount = rollCount + 1
         useItem:FireServer("Stand Arrow")
-        task.wait(7) -- เวลากดใช้
+        task.wait(7) -- รออนิเมชั่นใช้ไอเทม
         
-        -- เรียก Stand ออกมาเช็ค
+        -- เรียก Stand ออกมาเพื่อเช็คตัวล่าสุด
         local char = player.Character or player.CharacterAdded:Wait()
         local controller = char:FindFirstChild("client_character_controller")
         if controller and controller:FindFirstChild("SummonStand") then
             controller.SummonStand:FireServer()
         end
         task.wait(2)
-    else
-        warn("No Arrows left!")
-        -- คุณสามารถใส่ฟังก์ชันย้ายเซิร์ฟเวอร์ (Server Hop) ตรงนี้ได้
     end
 end
 
 -- [[ 6. Main Execution Loop ทุก 3 วินาที ]]
-print("Whitesnake Bot Started!")
+print("Whitesnake Bot with Live Stats Started!")
 
 while true do
     local currentStand = getStand()
     local isWS = (currentStand == "Whitesnake")
 
-    -- อัปเดต Discord
+    -- อัปเดตข้อมูลไปยัง Discord
     updateWebhook(currentStand, isWS and "SUCCESS" or "ROLLING")
 
-    -- ถ้าเจอ Whitesnake แล้ว ให้หยุดสคริปต์
+    -- ถ้าเจอเป้าหมายแล้วให้หยุด
     if isWS then 
         print("🎉 FOUND WHITESNAKE!")
         break 
     end
 
-    -- ถ้ายังไม่เจอ ให้ทำการสุ่มต่อ
+    -- ถ้ายังไม่เจอ ให้ทำการสุ่ม
     autoRoll()
     
-    task.wait(3) -- หน่วงเวลาตามที่ต้องการ
+    task.wait(3) -- หน่วงเวลา 3 วินาทีตามที่ต้องการ
 end
