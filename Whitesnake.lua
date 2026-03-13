@@ -6,28 +6,33 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local player = Players.LocalPlayer
 
--- รอโฟลเดอร์สำคัญ
-local inventory = player.PlayerGui:WaitForChild("Inventory")
-local canvas = inventory:WaitForChild("CanvasGroup")
-local backpack = canvas:WaitForChild("backpack_frame")
-local enlarge = backpack:WaitForChild("enlarging_frame")
-local holder = enlarge:WaitForChild("holder")
+task.wait(6)
 
+-- inventory
+local holder = player.PlayerGui
+:WaitForChild("Inventory")
+:WaitForChild("CanvasGroup")
+:WaitForChild("backpack_frame")
+:WaitForChild("enlarging_frame")
+:WaitForChild("holder")
+
+-- live folder
 local liveFolder = workspace:WaitForChild("Live")
 
--- Remote
+-- item folder (สำคัญมาก เร็วกว่า scan ทั้งแมพ)
+local itemsFolder = workspace:FindFirstChild("Items") or workspace
+
+-- remote
 local useArrow = ReplicatedStorage
 :WaitForChild("requests")
 :WaitForChild("character")
 :WaitForChild("use_item")
 
--- หา HumanoidRootPart
 local function getRoot()
     local char = player.Character or player.CharacterAdded:Wait()
     return char:WaitForChild("HumanoidRootPart")
 end
 
--- เรียก Stand
 local function summonStand()
 
     local char = player.Character or player.CharacterAdded:Wait()
@@ -38,7 +43,6 @@ local function summonStand()
 
 end
 
--- อ่าน Stand
 local function getStand()
 
     local char = liveFolder:FindFirstChild(player.Name)
@@ -49,7 +53,6 @@ local function getStand()
 
 end
 
--- ใช้ Stand Arrow
 local function rollStand()
 
     local args = {"Stand Arrow"}
@@ -57,7 +60,6 @@ local function rollStand()
 
 end
 
--- เช็คจำนวน Arrow
 local function getArrowAmount()
 
     local slot = holder:FindFirstChild("Stand Arrow")
@@ -70,7 +72,55 @@ local function getArrowAmount()
     return 0
 end
 
--- Server Hop
+-- หา Arrow ที่ใกล้ที่สุด (เฉพาะ Items folder)
+local function getNearestArrow()
+
+    local root = getRoot()
+    local nearest = nil
+    local dist = math.huge
+
+    for _,v in pairs(itemsFolder:GetChildren()) do
+
+        if v.Name == "Stand Arrow" then
+
+            local part = v:IsA("BasePart") and v or v:FindFirstChildWhichIsA("BasePart")
+
+            if part then
+
+                local d = (root.Position - part.Position).Magnitude
+
+                if d < dist then
+                    dist = d
+                    nearest = part
+                end
+
+            end
+
+        end
+
+    end
+
+    return nearest
+end
+
+
+local function collectArrow(arrow)
+
+    local root = getRoot()
+
+    root.CFrame = arrow.CFrame + Vector3.new(0,3,0)
+
+    task.wait(0.3)
+
+    local prompt = arrow:FindFirstChildWhichIsA("ProximityPrompt",true)
+
+    if prompt then
+        fireproximityprompt(prompt)
+    end
+
+end
+
+
 local function serverHop()
 
     warn("Server hopping...")
@@ -79,43 +129,58 @@ local function serverHop()
 end
 
 
-while task.wait(2) do
+-- เช็คตอนเข้าเซิร์ฟก่อน
+local startStand = getStand()
 
-    local amount = getArrowAmount()
+if startStand == "Whitesnake" then
+    warn("Already have Whitesnake")
+    return
+end
 
-    -- Arrow หมด
-    if amount <= 0 then
 
-        warn("Arrow empty, waiting 10 seconds before hop")
+while task.wait(0.5) do
 
-        task.wait(10)
+    local arrow = getNearestArrow()
 
-        -- เช็คอีกครั้งกันบัค GUI
-        if getArrowAmount() <= 0 then
-            serverHop()
-            break
+    if arrow then
+
+        collectArrow(arrow)
+
+    else
+
+        local amount = getArrowAmount()
+
+        if amount <= 0 then
+
+            warn("Arrow empty, waiting 10 seconds")
+
+            task.wait(10)
+
+            if getArrowAmount() <= 0 then
+                serverHop()
+                break
+            end
+
         end
 
-    end
+        rollStand()
 
-    -- ใช้ Arrow
-    rollStand()
+        task.wait(2)
 
-    task.wait(2)
+        summonStand()
 
-    -- เรียก Stand
-    summonStand()
+        task.wait(1)
 
-    task.wait(1)
+        local stand = getStand()
 
-    local stand = getStand()
+        print("Current Stand:",stand)
 
-    print("Current Stand:", stand)
+        if stand == "Whitesnake" then
 
-    if stand == "Whitesnake" then
+            warn("WHITESNAKE FOUND")
+            break
 
-        warn("GOT WHITESNAKE")
-        break
+        end
 
     end
 
