@@ -1,7 +1,7 @@
 repeat task.wait() until game:IsLoaded()
 
 -- [[ ตั้งค่า WEBHOOK ตรงนี้ ]] --
-local WEBHOOK_URL = "ใส่_WEBHOOK_URL_ตรงนี้" 
+local WEBHOOK_URL = "https://discord.com/api/webhooks/1479380422713409577/fTqx3VvsvwIQTked1qTNEoLQ_HVbaETnRjyEaVlrR0891T-NaMZJCel9zC3XBejPxJ9-" 
 local last_msg_id = nil 
 
 local Players = game:GetService("Players")
