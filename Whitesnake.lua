@@ -22,7 +22,7 @@ local holder = player.PlayerGui
 -- stand folder
 local liveFolder = workspace:WaitForChild("Live")
 
--- item folder
+-- items
 local itemsFolder = workspace:FindFirstChild("Items") or workspace
 
 -- remote
@@ -33,8 +33,10 @@ local useArrow = ReplicatedStorage
 
 -- root
 local function getRoot()
+
     local char = player.Character or player.CharacterAdded:Wait()
     return char:WaitForChild("HumanoidRootPart")
+
 end
 
 -- summon stand
@@ -42,13 +44,19 @@ local function summonStand()
 
     local char = player.Character or player.CharacterAdded:Wait()
 
-    char:WaitForChild("client_character_controller")
-    :WaitForChild("SummonStand")
-    :FireServer()
+    local controller = char:FindFirstChild("client_character_controller")
+
+    if controller then
+        local remote = controller:FindFirstChild("SummonStand")
+
+        if remote then
+            remote:FireServer()
+        end
+    end
 
 end
 
--- read stand
+-- get stand
 local function getStand()
 
     local char = liveFolder:FindFirstChild(player.Name)
@@ -59,7 +67,7 @@ local function getStand()
 
 end
 
--- use arrow
+-- roll stand
 local function rollStand()
 
     local args = {"Stand Arrow"}
@@ -67,7 +75,7 @@ local function rollStand()
 
 end
 
--- check arrow amount
+-- arrow amount
 local function getArrowAmount()
 
     local slot = holder:FindFirstChild("Stand Arrow")
@@ -83,7 +91,7 @@ local function getArrowAmount()
 
 end
 
--- find nearest arrow
+-- nearest arrow
 local function getNearestArrow()
 
     local root = getRoot()
@@ -102,10 +110,8 @@ local function getNearestArrow()
                 local d = (root.Position - part.Position).Magnitude
 
                 if d < dist then
-
                     dist = d
                     nearest = part
-
                 end
 
             end
@@ -135,7 +141,7 @@ local function collectArrow(arrow)
 
 end
 
--- SERVER HOP (ANTI 429)
+-- server hop
 local function serverHop()
 
     warn("Server hopping...")
@@ -201,7 +207,7 @@ local function serverHop()
 
     else
 
-        warn("Retry hop")
+        warn("Retry server hop")
         task.wait(5)
         serverHop()
 
@@ -214,12 +220,11 @@ end
 local startStand = getStand()
 
 if startStand == "Whitesnake" then
-    warn("Already have Whitesnake")
+    warn("Already Whitesnake")
     return
 end
 
 
--- main loop
 while task.wait(0.5) do
 
     local arrow = getNearestArrow()
@@ -239,10 +244,8 @@ while task.wait(0.5) do
             task.wait(10)
 
             if getArrowAmount() <= 0 then
-
                 serverHop()
                 break
-
             end
 
         end
@@ -253,7 +256,7 @@ while task.wait(0.5) do
 
         summonStand()
 
-        task.wait(2)
+        task.wait(1)
 
         local stand = getStand()
 
