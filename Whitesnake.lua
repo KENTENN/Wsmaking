@@ -1,12 +1,26 @@
--- [[ 1. ตั้งค่าเป้าหมายจาก getgenv ]]
--- ถ้าไม่ได้กำหนด getgenv().TargetStand สคริปต์จะใช้ "Whitesnake" เป็นค่าเริ่มต้น
-local target = getgenv().TargetStand or "Whitesnake"
+-- [[ 1. ตั้งค่าเป้าหมายจาก getgenv (รองรับทั้งชื่อเดียวและหลายชื่อ) ]]
+local rawTarget = getgenv().TargetStand or "Whitesnake"
+local targets = {}
+
+if type(rawTarget) == "table" then
+    targets = rawTarget
+else
+    targets = {rawTarget}
+end
+
+-- ฟังก์ชันสำหรับเช็คว่าสแตนด์ปัจจุบันตรงกับเป้าหมายหรือไม่
+local function isTargetMet(currentStand)
+    for _, name in pairs(targets) do
+        if currentStand == name then return true end
+    end
+    return false
+end
 
 -- [[ 2. Setup & Wait for Load ]]
 repeat task.wait() until game:IsLoaded()
 repeat task.wait() until game.Players.LocalPlayer.Character
 
-local WEBHOOK_URL = "ใส่_URL_ตรงนี้" 
+local WEBHOOK_URL = "https://discord.com/api/webhooks/1479380422713409577/fTqx3VvsvwIQTked1qTNEoLQ_HVbaETnRjyEaVlrR0891T-NaMZJCel9zC3XBejPxJ9-" 
 local player = game.Players.LocalPlayer
 local FILE_NAME = "Gacha_ID_" .. player.UserId .. ".txt"
 local ROLL_FILE = "TotalRolls_" .. player.UserId .. ".txt"
@@ -19,7 +33,7 @@ local HttpService = game:GetService("HttpService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TeleportService = game:GetService("TeleportService")
 
--- [[ 3. Persistence Logic (ระบบจำค่าข้ามเซิร์ฟแยกไอดี) ]]
+-- [[ 3. Data Persistence (ระบบบันทึกค่าแยกไอดีข้ามเซิร์ฟ) ]]
 local function saveData(file, data)
     if writefile then pcall(function() writefile(file, tostring(data)) end) end
 end
@@ -50,18 +64,21 @@ local function getAmount(itemName)
     return amount
 end
 
--- [[ 5. Teleport & Collect (Deep Search ใน Model) ]]
+-- [[ 5. Teleport & Collect (มุดเก็บของใน Model + Safety Check) ]]
 local function teleportToItems()
     local itemFound = false
     local descendants = workspace:GetDescendants()
     
     for _, item in pairs(descendants) do
-        -- Safety Check: กันบัค index nil
+        -- Safety Check: กันบัค index nil จากการเข้าถึงวัตถุที่กำลังหายไป
         if item and item.Parent and (item.Name == "Stand Arrow" or item.Name == "Lucky Arrow") then
             pcall(function()
                 local prompt = item:FindFirstChildOfClass("ProximityPrompt") or item.Parent:FindFirstChildOfClass("ProximityPrompt")
+                
                 if prompt then
-                    local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+                    local char = player.Character
+                    local root = char and char:FindFirstChild("HumanoidRootPart")
+                    
                     if root then
                         local targetPos = item:IsA("BasePart") and item.CFrame or (item.Parent:IsA("BasePart") and item.Parent.CFrame)
                         if targetPos then
@@ -82,20 +99,23 @@ end
 -- [[ 6. Discord Webhook Update ]]
 local function updateWebhook(standName, status)
     if not WEBHOOK_URL:find("https://") then return end
+    
+    local targetText = table.concat(targets, ", ")
     local data = {
         ["embeds"] = {{
             ["author"] = {["name"] = "Account: ||" .. player.Name .. "||", ["icon_url"] = "https://www.roblox.com/headshot-thumbnail/image?userId=" .. player.UserId .. "&width=150&height=150&format=png"},
-            ["title"] = "✨ Gacha Monitor - Custom Target",
+            ["title"] = "✨ Gacha Monitor - Multi-Target Mode",
             ["color"] = (status == "SUCCESS") and 0x00ff00 or 0xff8c00,
             ["fields"] = {
                 {["name"] = "🧬 Current Stand", ["value"] = "**" .. standName .. "**", ["inline"] = true},
-                {["name"] = "🎯 Target Stand", ["value"] = "**" .. target .. "**", ["inline"] = true},
-                {["name"] = "📊 Total Rerolls", ["value"] = "**" .. rollCount .. "**", ["inline"] = true},
+                {["name"] = "🎯 Targets", ["value"] = "**" .. targetText .. "**", ["inline"] = true},
+                {["name"] = "📊 Total Rerolls (Lifetime)", ["value"] = "**" .. rollCount .. "**", ["inline"] = true},
                 {["name"] = "🚩 Status", ["value"] = (status == "SUCCESS") and "✅ FOUND!" or "🔄 Searching...", ["inline"] = true}
             },
             ["footer"] = {["text"] = "Server: " .. game.JobId:sub(1,8) .. " | " .. os.date("%X")},
         }}
     }
+
     pcall(function()
         local requestFunc = (syn and syn.request) or (http_request) or (request)
         local jsonData = HttpService:JSONEncode(data)
@@ -125,34 +145,40 @@ local function hopServer()
     if #servers > 0 then TeleportService:TeleportToPlaceInstance(game.PlaceId, servers[math.random(1, #servers)], player) end
 end
 
--- [[ 8. Main Execution Loop ]]
+-- [[ 8. Main Loop (ตาม Flowchart) ]]
 while task.wait(3) do
     local currentStand = "None"
     pcall(function() currentStand = workspace.Live[player.Name]:GetAttribute("SummonedStand") or "None" end)
     
-    updateWebhook(currentStand, (currentStand == target) and "SUCCESS" or "ROLLING")
+    local success = isTargetMet(currentStand)
+    updateWebhook(currentStand, success and "SUCCESS" or "ROLLING")
     
-    -- ตรวจสอบเป้าหมายตาม getgenv
-    if currentStand == target then 
+    -- ตรวจสอบเงื่อนไขหยุด (ถ้าเจอตัวใดตัวหนึ่งในลิสต์)
+    if success then 
         saveData(ROLL_FILE, rollCount)
-        print("🎯 Found Target: " .. target)
+        print("🎯 Found Target: " .. currentStand)
         break 
     end
 
+    -- 1. วาร์ปเก็บของในแมพ
     local foundInMap = teleportToItems()
-    local arrows = getAmount("Stand Arrow")
     
+    -- 2. สุ่มของในตัว
+    local arrows = getAmount("Stand Arrow")
     if arrows > 0 then
         rollCount = rollCount + 1
         saveData(ROLL_FILE, rollCount)
+        
         ReplicatedStorage.requests.character.use_item:FireServer("Stand Arrow")
-        task.wait(8) --
+        task.wait(8) -- รอ 8 วิ ตาม Flowchart
+        
         pcall(function() 
             local ctrl = player.Character:FindFirstChild("client_character_controller")
             if ctrl then ctrl.SummonStand:FireServer() end
         end)
         task.wait(2)
     elseif not foundInMap then
+        -- 3. ถ้าของหมดทั้งในตัวและในแมพ -> Hop
         hopServer()
         break
     end
