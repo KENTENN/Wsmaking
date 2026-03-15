@@ -1,23 +1,18 @@
--- [[ 1. ตั้งค่าเป้าหมายจาก getgenv ]]
+-- [[ 1. ตั้งค่าเป้าหมาย ]]
 local rawTarget = getgenv().TargetStand or "Whitesnake"
 local targets = {}
 if type(rawTarget) == "table" then targets = rawTarget else targets = {rawTarget} end
 
-print("🔍 เป้าหมายที่ต้องการ: " .. table.concat(targets, ", "))
+print("🎯 เป้าหมายที่ต้องการ: " .. table.concat(targets, ", "))
 
--- ฟังก์ชันสำหรับเช็คว่าสแตนด์ปัจจุบันตรงกับเป้าหมายหรือไม่
 local function isTargetMet(currentStand)
-    for _, name in pairs(targets) do
-        if currentStand == name then return true end
-    end
+    for _, name in pairs(targets) do if currentStand == name then return true end end
     return false
 end
 
--- [[ 2. Setup & Wait for Load ]]
-print("⏳ กำลังรอให้เกมและตัวละครโหลด...")
+-- [[ 2. Setup ]]
 repeat task.wait() until game:IsLoaded()
 repeat task.wait() until game.Players.LocalPlayer.Character
-print("✅ เกมโหลดเสร็จสิ้น!")
 
 local WEBHOOK_URL = "https://discord.com/api/webhooks/1479380422713409577/fTqx3VvsvwIQTked1qTNEoLQ_HVbaETnRjyEaVlrR0891T-NaMZJCel9zC3XBejPxJ9-" 
 local player = game.Players.LocalPlayer
@@ -33,22 +28,12 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TeleportService = game:GetService("TeleportService")
 
 -- [[ 3. Data Persistence ]]
-local function saveData(file, data)
-    if writefile then pcall(function() writefile(file, tostring(data)) end) end
-end
+local function saveData(file, data) if writefile then pcall(function() writefile(file, tostring(data)) end) end end
+local function loadData(file) if isfile and isfile(file) then local success, content = pcall(function() return readfile(file) end) return success and content or nil end return nil end
 
-local function loadData(file)
-    if isfile and isfile(file) then
-        local success, content = pcall(function() return readfile(file) end)
-        return success and content or nil
-    end
-    return nil
-end
-
-print("💾 กำลังโหลดสถิติเดิม...")
 last_msg_id = loadData(FILE_NAME)
 rollCount = tonumber(loadData(ROLL_FILE)) or 0
-print("📊 สถิติล่าสุด: สุ่มไปแล้ว " .. rollCount .. " รอบ")
+print("📊 สถิติเดิม: สุ่มไปแล้ว " .. rollCount .. " รอบ")
 
 -- [[ 4. Inventory Check ]]
 local function getAmount(itemName)
@@ -70,79 +55,94 @@ local function teleportToItems()
     local itemFound = false
     local descendants = workspace:GetDescendants() --
     
-    print("📡 กำลังสแกนหาไอเทมใน Workspace...")
     for _, item in pairs(descendants) do
         if item and item.Parent and (item.Name == "Stand Arrow" or item.Name == "Lucky Arrow") then
-            print("✨ พบ " .. item.Name .. " ใน " .. item.Parent.Name) --
-            local success = pcall(function()
+            print("✨ พบ " .. item.Name .. " กำลังไปเก็บ...") --
+            pcall(function()
                 local prompt = item:FindFirstChildOfClass("ProximityPrompt") or item.Parent:FindFirstChildOfClass("ProximityPrompt")
                 if prompt then
                     local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
                     if root then
-                        print("🚀 กำลังวาร์ปไปเก็บไอเทม...")
                         local targetPos = item:IsA("BasePart") and item.CFrame or (item.Parent:IsA("BasePart") and item.Parent.CFrame)
                         if targetPos then
                             itemFound = true
                             root.CFrame = targetPos
                             task.wait(0.3)
                             fireproximityprompt(prompt)
-                            print("✅ เก็บไอเทมสำเร็จ!")
                             task.wait(0.5)
                         end
                     end
                 end
             end)
-            if not success then print("⚠️ เกิดข้อผิดพลาดในการเก็บไอเทม") end
         end
     end
-    if not itemFound then print("❌ ไม่พบไอเทมในแมพ") end
     return itemFound
 end
 
--- [[ 6. Main Loop ]]
-print("🎬 เริ่มการทำงานหลัก...")
+-- [[ 6. New Robust Server Hop (แก้ปัญหายืนนิ่ง) ]]
+local function hopServer()
+    print("🔄 กำลังค้นหาเซิร์ฟเวอร์ใหม่...")
+    saveData(ROLL_FILE, rollCount)
+    
+    local function fetchServers(cursor)
+        local url = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
+        if cursor then url = url .. "&cursor=" .. cursor end
+        local success, result = pcall(function() return HttpService:JSONDecode(game:HttpGet(url)) end)
+        return success and result or nil
+    end
+
+    while true do -- วนลูปจนกว่าจะวาร์ปออกไปได้
+        local data = fetchServers()
+        if data and data.data then
+            for _, server in ipairs(data.data) do
+                if server.id ~= game.JobId and server.playing < server.maxPlayers then
+                    print("🚀 เจอเซิร์ฟเวอร์แล้ว! กำลังวาร์ปไป: " .. server.id)
+                    local success, err = pcall(function()
+                        TeleportService:TeleportToPlaceInstance(game.PlaceId, server.id, player)
+                    end)
+                    task.wait(3) -- รอช่วงวาร์ป ถ้าไม่ไปให้หาต่อ
+                end
+            end
+        end
+        print("⚠️ ไม่เจอเซิร์ฟเวอร์ที่เหมาะสม รีไตรใน 5 วินาที...")
+        task.wait(5)
+    end
+end
+
+-- [[ 7. Main Loop ]]
+print("🎬 เริ่มการทำงาน...")
 while task.wait(3) do
     local currentStand = "None"
     pcall(function() currentStand = workspace.Live[player.Name]:GetAttribute("SummonedStand") or "None" end)
-    print("🧬 สแตนด์ปัจจุบันของคุณคือ: " .. currentStand)
+    print("🧬 Stand ปัจจุบัน: " .. currentStand)
 
-    local success = isTargetMet(currentStand)
-    
-    -- ตรวจสอบเงื่อนไขหยุด
-    if success then 
-        print("🎉 ภารกิจสำเร็จ! พบ " .. currentStand .. " แล้ว")
+    if isTargetMet(currentStand) then 
+        print("🎉 สำเร็จ! ได้ตัวที่ต้องการแล้ว")
         saveData(ROLL_FILE, rollCount)
         break 
     end
 
-    -- 1. วาร์ปเก็บของ
+    -- 1. เก็บของ
     teleportToItems()
     
-    -- 2. สุ่มของในตัว
+    -- 2. สุ่ม
     local arrows = getAmount("Stand Arrow")
-    print("🏹 จำนวนลูกธนูในกระเป๋า: " .. arrows)
-
     if arrows > 0 then
         rollCount = rollCount + 1
-        print("🎲 เริ่มการสุ่มรอบที่: " .. rollCount)
+        print("🎲 สุ่มรอบที่: " .. rollCount)
         saveData(ROLL_FILE, rollCount)
         
         ReplicatedStorage.requests.character.use_item:FireServer("Stand Arrow")
-        print("⏳ รอแอนิเมชัน 8 วินาที...") --
-        task.wait(8)
-        
-        print("⚡ เรียกสแตนด์ออกมมาเช็ค...")
+        task.wait(8) --
         pcall(function() 
             local ctrl = player.Character:FindFirstChild("client_character_controller")
             if ctrl then ctrl.SummonStand:FireServer() end
         end)
         task.wait(2)
     else
-        -- 3. ถ้าไม่มีของให้ย้ายเซิร์ฟ
-        print("🔄 ของหมดแล้ว! เตรียมตัวย้ายเซิร์ฟเวอร์...") --
-        -- (ฟังก์ชัน hopServer เหมือนเดิม)
-        saveData(ROLL_FILE, rollCount)
-        -- เรียกใช้ hopServer() ตรงนี้
-        break
+        -- 3. ถ้าของหมด ให้เรียก hopServer และไม่รันโค้ดต่อในเซิร์ฟเดิม
+        print("❌ ของหมด! ทำการย้ายเซิร์ฟเวอร์...") --
+        hopServer()
+        return -- ป้องกันการรัน Loop ต่อขณะรอวาร์ป
     end
 end
