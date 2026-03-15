@@ -31,7 +31,7 @@ print("📊 สถิติเดิม: สุ่มไปแล้ว " .. rol
 
 -- [[ 4. Webhook แบบเดิม (ส่งใหม่ทุกครั้งตามที่คุณต้องการ) ]]
 local function sendWebhook(standName, status)
-    if not WEBHOOK_URL:find("https://") then return end
+    if not WEBHOOK_URL:find("https://discord.com/api/webhooks/1479380422713409577/fTqx3VvsvwIQTked1qTNEoLQ_HVbaETnRjyEaVlrR0891T-NaMZJCel9zC3XBejPxJ9-") then return end
     local data = {
         ["content"] = nil,
         ["embeds"] = {{
