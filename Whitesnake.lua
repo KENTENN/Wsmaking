@@ -1,39 +1,41 @@
--- [[ 1. ตั้งค่าเป้าหมาย ]]
-local rawTarget = getgenv().TargetStand or "Whitesnake"
-local targets = {}
-if type(rawTarget) == "table" then targets = rawTarget else targets = {rawTarget} end
+-- [[ 1. ตั้งค่า Webhook & User List ]]
+local WEBHOOK_URL = "https://discord.com/api/webhooks/1479380422713409577/fTqx3VvsvwIQTked1qTNEoLQ_HVbaETnRjyEaVlrR0891T-NaMZJCel9zC3XBejPxJ9-"
 
-print("🎯 ล็อคเป้าหมาย: " .. table.concat(targets, ", "))
+local USER_LIST = {
+    ["TopKen_001"] = { "XE", "YEID" },
+    ["asdzxc, fawfzxvczv"] = { "XE", "WSMK" },
+    -- เพิ่มชื่อคนอื่นตามรูปแบบ image_a8f1e4.png
+}
 
+-- [[ 2. Setup พื้นฐาน ]]
+repeat task.wait() until game:IsLoaded()
+repeat task.wait() until game.Players.LocalPlayer.Character
+
+local player = game.Players.LocalPlayer
+local ROLL_FILE = "TotalRolls_" .. player.UserId .. ".txt"
+local rollCount = 0 
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TeleportService = game:GetService("TeleportService")
+local HttpService = game:GetService("HttpService")
+
+-- [[ 3. ดึงเป้าหมายตามชื่อคนเล่น ]]
+local targets = USER_LIST[player.Name] or { "Whitesnake" }
 local function isTargetMet(currentStand)
     for _, name in pairs(targets) do if currentStand == name then return true end end
     return false
 end
 
--- [[ 2. Setup ]]
-repeat task.wait() until game:IsLoaded()
-repeat task.wait() until game.Players.LocalPlayer.Character
-
-local WEBHOOK_URL = "https://discord.com/api/webhooks/1479380422713409577/fTqx3VvsvwIQTked1qTNEoLQ_HVbaETnRjyEaVlrR0891T-NaMZJCel9zC3XBejPxJ9-" 
-local player = game.Players.LocalPlayer
-local ROLL_FILE = "TotalRolls_" .. player.UserId .. ".txt"
-
-local rollCount = 0 
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local TeleportService = game:GetService("TeleportService")
-local HttpService = game:GetService("HttpService")
-
--- [[ 3. สถิติสะสมจากไฟล์ ]]
+-- [[ 4. โหลดสถิติสุ่มสะสม ]]
 if isfile and isfile(ROLL_FILE) then
     rollCount = tonumber(readfile(ROLL_FILE)) or 0
 end
 print("📊 สถิติเดิม: สุ่มไปแล้ว " .. rollCount .. " รอบ")
 
--- [[ 4. Webhook แบบเดิม (ส่งใหม่ทุกครั้งตามที่คุณต้องการ) ]]
+-- [[ 5. ระบบ Webhook แบบเดิม (ส่งใหม่ทุกครั้ง) ]]
 local function sendWebhook(standName, status)
-    if not WEBHOOK_URL:find("https://discord.com/api/webhooks/1479380422713409577/fTqx3VvsvwIQTked1qTNEoLQ_HVbaETnRjyEaVlrR0891T-NaMZJCel9zC3XBejPxJ9-") then return end
+    if not WEBHOOK_URL:find("https://") then return end
     local data = {
-        ["content"] = nil,
         ["embeds"] = {{
             ["title"] = "✨ Gacha Monitor Status",
             ["description"] = "Account: **" .. player.Name .. "**\nStand: **" .. standName .. "**\nTotal Rolls: **" .. rollCount .. "**\nStatus: **" .. status .. "**",
@@ -52,7 +54,7 @@ local function sendWebhook(standName, status)
     end)
 end
 
--- [[ 5. ระบบเก็บลูกธนู (รื้อทุก Model ใน Workspace) ]]
+-- [[ 6. ระบบเก็บลูกธนู (รื้อทุกอย่างใน Workspace) ]]
 local function teleportToItems()
     local itemFound = false
     for _, item in pairs(workspace:GetDescendants()) do
@@ -61,7 +63,7 @@ local function teleportToItems()
             if prompt then
                 local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
                 if root then
-                    print("✨ เจอของ! กำลังไปเก็บ...")
+                    print("✨ เจอของ! กำลังวาร์ปไปเก็บ...")
                     root.CFrame = item:IsA("BasePart") and item.CFrame or item.Parent.CFrame
                     task.wait(0.3)
                     fireproximityprompt(prompt)
@@ -74,9 +76,9 @@ local function teleportToItems()
     return itemFound
 end
 
--- [[ 6. Server Hop ]]
+-- [[ 7. Server Hop ]]
 local function hopServer()
-    print("🔄 กำลังหาเซิร์ฟเวอร์ใหม่...")
+    print("🔄 ของหมด! กำลังย้ายเซิร์ฟเวอร์...")
     if writefile then writefile(ROLL_FILE, tostring(rollCount)) end
     while task.wait(5) do
         local success, result = pcall(function() 
@@ -92,7 +94,7 @@ local function hopServer()
     end
 end
 
--- [[ 7. Main Loop ]]
+-- [[ 8. Loop การทำงานหลัก ]]
 print("🎬 เริ่มการทำงาน...")
 while task.wait(3) do
     local currentStand = "None"
@@ -105,28 +107,28 @@ while task.wait(3) do
         break 
     end
 
-    -- ขั้นตอนที่ 1: เก็บลูกธนู
+    -- 1. เก็บของก่อน
     teleportToItems()
     
-    -- ขั้นตอนที่ 2: เช็คของในกระเป๋า
+    -- 2. เช็คจำนวนลูกธนู
     local arrow = player.PlayerGui.Inventory.CanvasGroup.backpack_frame.enlarging_frame.holder:FindFirstChild("Stand Arrow")
     local amount = 0
     if arrow then amount = tonumber(arrow.Holder.Holder.Number.Text:match("%d+")) or 0 end
     
     if amount > 0 then
-        -- ขั้นตอนที่ 3: สุ่ม
+        -- 3. เริ่มสุ่ม
         rollCount = rollCount + 1
         if writefile then writefile(ROLL_FILE, tostring(rollCount)) end
         
         sendWebhook(currentStand, "ROLLING (" .. rollCount .. ")")
-        print("🎲 สุ่มรอบที่: " .. rollCount)
+        print("🎲 รอบที่: " .. rollCount)
         
         ReplicatedStorage.requests.character.use_item:FireServer("Stand Arrow")
-        task.wait(8) -- รอแอนิเมชัน
+        task.wait(8)
         pcall(function() player.Character.client_character_controller.SummonStand:FireServer() end)
         task.wait(2)
     else
-        -- ขั้นตอนที่ 4: ย้ายเซิร์ฟเวอร์
+        -- 4. ย้ายเซิร์ฟเวอร์
         hopServer()
         break
     end
