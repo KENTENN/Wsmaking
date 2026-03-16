@@ -3,7 +3,7 @@ local WEBHOOK_URL = "https://discord.com/api/webhooks/1479380422713409577/fTqx3V
 
 local USER_LIST = {
     ["6245R"] = { "Gold Experience", "Whitesnake" },
-
+    [""] = { "XE", "YEID" },
 }
 
 -- [[ 2. INITIALIZATION ]]
@@ -55,53 +55,31 @@ local function updateWebhook(standName, status)
     end
 end
 
--- [[ 4. AUTO-COLLECT ]]
-local function collectItems()
-    local descendants = workspace:GetDescendants()
-    for _, item in ipairs(descendants) do
-        if (item.Name == "Stand Arrow" or item.Name == "Lucky Arrow") and item:FindFirstChildOfClass("ProximityPrompt") then
-            local root = player.Character:FindFirstChild("HumanoidRootPart")
-            if root then
-                print("✨ เจอของ! กำลังวาร์ปไปเก็บ: " .. item.Name)
-                root.CFrame = item:IsA("BasePart") and item.CFrame or item.Parent.CFrame
-                task.wait(0.3)
-                fireproximityprompt(item:FindFirstChildOfClass("ProximityPrompt"))
-                task.wait(0.5)
-            end
-        end
-    end
-end
-
--- [[ 5. STABLE SERVER HOP (Loop + Delay) ]]
+-- [[ 4. STABLE SERVER HOP ]]
 local function serverHop()
-    print("🔄 ของหมด! กำลังเข้าสู่ระบบย้ายเซิร์ฟเวอร์...")
+    print("🔄 ของหมด! กำลังวนลูปหาเซิร์ฟเวอร์ใหม่...")
     local api_url = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
-    
-    while task.wait(5) do -- หน่วงเวลา 5 วินาทีในแต่ละรอบเพื่อกันบัค
-        local success, result = pcall(function()
-            return HttpService:JSONDecode(game:HttpGet(api_url)).data
-        end)
-        
+    while task.wait(5) do
+        local success, result = pcall(function() return HttpService:JSONDecode(game:HttpGet(api_url)).data end)
         if success and result then
             for _, s in ipairs(result) do
                 if s.id ~= game.JobId and s.playing < s.maxPlayers then
-                    print("🚀 เจอเซิร์ฟเวอร์ใหม่: " .. s.id .. " กำลังวาร์ป...")
-                    local teleportSuccess, teleportErr = pcall(function()
-                        TeleportService:TeleportToPlaceInstance(game.PlaceId, s.id, player)
-                    end)
-                    if not teleportSuccess then
-                        print("❌ วาร์ปล้มเหลว: " .. tostring(teleportErr) .. " กำลังลองใหม่...")
-                    end
+                    print("🚀 กำลังวาร์ปไปเซิร์ฟเวอร์: " .. s.id)
+                    TeleportService:TeleportToPlaceInstance(game.PlaceId, s.id, player)
                 end
             end
-        else
-            print("⚠️ ไม่พบข้อมูลเซิร์ฟเวอร์หรือ API Error (กำลังรอสุ่มใหม่...)")
         end
     end
 end
 
--- [[ 6. MAIN LOOP ]]
-print("🎬 ระบบเริ่มทำงาน (Single Message Edit Mode)...")
+-- [[ 5. MAIN LOGIC ]]
+print("🎬 เริ่มระบบ (Initial Check Mode)...")
+
+-- ** FIX: Summon ทันทีที่เข้าเกมเพื่อเช็คแสตนด์ปัจจุบัน **
+pcall(function() player.Character.client_character_controller.SummonStand:FireServer() end)
+print("⏳ กำลังเรียกแสตนด์เพื่อตรวจสอบ...")
+task.wait(3) -- รอ Attribute อัปเดต
+
 while task.wait(3) do
     local currentStand = "None"
     pcall(function() currentStand = workspace.Live[player.Name]:GetAttribute("SummonedStand") or "None" end)
@@ -112,10 +90,25 @@ while task.wait(3) do
     for _, t in pairs(targets) do if currentStand == t then found = true break end end
     
     updateWebhook(currentStand, found and "SUCCESS" or "ROLLING")
-    if found then print("🎉 สำเร็จ! ได้ตัวที่ต้องการแล้ว") break end
+    if found then 
+        print("🎉 ภารกิจสำเร็จ! ได้ " .. currentStand .. " แล้ว") 
+        break 
+    end
 
-    collectItems()
-    
+    -- เก็บลูกธนู
+    for _, item in ipairs(workspace:GetDescendants()) do
+        if (item.Name == "Stand Arrow" or item.Name == "Lucky Arrow") and item:FindFirstChildOfClass("ProximityPrompt") then
+            local root = player.Character:FindFirstChild("HumanoidRootPart")
+            if root then
+                root.CFrame = item:IsA("BasePart") and item.CFrame or item.Parent.CFrame
+                task.wait(0.3)
+                fireproximityprompt(item:FindFirstChildOfClass("ProximityPrompt"))
+                task.wait(0.5)
+            end
+        end
+    end
+
+    -- เช็คไอเทมเพื่อสุ่ม
     local arrow = player.PlayerGui.Inventory.CanvasGroup.backpack_frame.enlarging_frame.holder:FindFirstChild("Stand Arrow")
     local amount = arrow and tonumber(arrow.Holder.Holder.Number.Text:match("%d+")) or 0
     
@@ -127,9 +120,8 @@ while task.wait(3) do
         ReplicatedStorage.requests.character.use_item:FireServer("Stand Arrow")
         task.wait(8)
         pcall(function() player.Character.client_character_controller.SummonStand:FireServer() end)
-        task.wait(2)
     else
-        serverHop() -- เข้าสู่ลูปย้ายเซิร์ฟเวอร์แบบไม่หลุด
+        serverHop()
         break
     end
 end
