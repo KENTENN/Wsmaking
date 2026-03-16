@@ -3,7 +3,7 @@ local WEBHOOK_URL = "https://discord.com/api/webhooks/1479380422713409577/fTqx3V
 
 local USER_LIST = {
     ["6245R"] = { "Gold Experience", "Whitesnake" },
-    ["TopKen_001"] = { "XE", "YEID" },
+
 }
 
 -- [[ 2. INITIALIZATION ]]
