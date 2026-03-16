@@ -6,8 +6,7 @@ local USER_LIST = {
     ["TopKen_001"] = { "XE", "YEID" },
 }
 
--- [[ 2. SETUP & DATA LOADING ]]
-print("⏳ Loading script...")
+-- [[ 2. INITIALIZATION ]]
 repeat task.wait() until game:IsLoaded()
 repeat task.wait() until game.Players.LocalPlayer.Character
 
@@ -17,8 +16,6 @@ local MSG_FILE = "WebhookID_" .. player.UserId .. ".txt"
 
 local rollCount = isfile(ROLL_FILE) and tonumber(readfile(ROLL_FILE)) or 0
 local last_msg_id = isfile(MSG_FILE) and readfile(MSG_FILE) or nil
-
-print("📊 สถิติเดิม: สุ่มไปแล้ว " .. rollCount .. " รอบ")
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local HttpService = game:GetService("HttpService")
@@ -58,11 +55,9 @@ local function updateWebhook(standName, status)
     end
 end
 
--- [[ 4. AUTO-COLLECT (With Logs) ]]
+-- [[ 4. AUTO-COLLECT ]]
 local function collectItems()
     local descendants = workspace:GetDescendants()
-    if not descendants then return end
-    
     for _, item in ipairs(descendants) do
         if (item.Name == "Stand Arrow" or item.Name == "Lucky Arrow") and item:FindFirstChildOfClass("ProximityPrompt") then
             local root = player.Character:FindFirstChild("HumanoidRootPart")
@@ -77,8 +72,36 @@ local function collectItems()
     end
 end
 
--- [[ 5. MAIN LOOP ]]
-print("🎬 เริ่มการทำงาน...")
+-- [[ 5. STABLE SERVER HOP (Loop + Delay) ]]
+local function serverHop()
+    print("🔄 ของหมด! กำลังเข้าสู่ระบบย้ายเซิร์ฟเวอร์...")
+    local api_url = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
+    
+    while task.wait(5) do -- หน่วงเวลา 5 วินาทีในแต่ละรอบเพื่อกันบัค
+        local success, result = pcall(function()
+            return HttpService:JSONDecode(game:HttpGet(api_url)).data
+        end)
+        
+        if success and result then
+            for _, s in ipairs(result) do
+                if s.id ~= game.JobId and s.playing < s.maxPlayers then
+                    print("🚀 เจอเซิร์ฟเวอร์ใหม่: " .. s.id .. " กำลังวาร์ป...")
+                    local teleportSuccess, teleportErr = pcall(function()
+                        TeleportService:TeleportToPlaceInstance(game.PlaceId, s.id, player)
+                    end)
+                    if not teleportSuccess then
+                        print("❌ วาร์ปล้มเหลว: " .. tostring(teleportErr) .. " กำลังลองใหม่...")
+                    end
+                end
+            end
+        else
+            print("⚠️ ไม่พบข้อมูลเซิร์ฟเวอร์หรือ API Error (กำลังรอสุ่มใหม่...)")
+        end
+    end
+end
+
+-- [[ 6. MAIN LOOP ]]
+print("🎬 ระบบเริ่มทำงาน (Single Message Edit Mode)...")
 while task.wait(3) do
     local currentStand = "None"
     pcall(function() currentStand = workspace.Live[player.Name]:GetAttribute("SummonedStand") or "None" end)
@@ -89,7 +112,7 @@ while task.wait(3) do
     for _, t in pairs(targets) do if currentStand == t then found = true break end end
     
     updateWebhook(currentStand, found and "SUCCESS" or "ROLLING")
-    if found then print("🎉 ภารกิจสำเร็จ! ได้แสตนด์ที่ต้องการแล้ว") break end
+    if found then print("🎉 สำเร็จ! ได้ตัวที่ต้องการแล้ว") break end
 
     collectItems()
     
@@ -99,29 +122,14 @@ while task.wait(3) do
     if amount > 0 then
         rollCount = rollCount + 1
         writefile(ROLL_FILE, tostring(rollCount))
-        
         print("🎲 รอบที่: " .. rollCount)
+        
         ReplicatedStorage.requests.character.use_item:FireServer("Stand Arrow")
         task.wait(8)
         pcall(function() player.Character.client_character_controller.SummonStand:FireServer() end)
         task.wait(2)
     else
-        print("🔄 ของหมด! กำลังย้ายเซิร์ฟเวอร์...")
-        local success, result = pcall(function()
-            return HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100")).data
-        end)
-        
-        if success and result then
-            for _, s in ipairs(result) do
-                if s.id ~= game.JobId and s.playing < s.maxPlayers then
-                    print("🚀 เจอเซิร์ฟเวอร์ใหม่: " .. s.id)
-                    TeleportService:TeleportToPlaceInstance(game.PlaceId, s.id, player)
-                    break
-                end
-            end
-        else
-            print("❌ ไม่พบเซิร์ฟเวอร์ใหม่ หรือเกิด Error ใน API")
-        end
+        serverHop() -- เข้าสู่ลูปย้ายเซิร์ฟเวอร์แบบไม่หลุด
         break
     end
 end
