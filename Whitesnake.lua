@@ -2,8 +2,8 @@
 local WEBHOOK_URL = "https://discord.com/api/webhooks/1479380422713409577/fTqx3VvsvwIQTked1qTNEoLQ_HVbaETnRjyEaVlrR0891T-NaMZJCel9zC3XBejPxJ9-"
 
 local USER_LIST = {
-    ["6245R"] = { "Gold Experience", "Whitesnake" },
-    [""] = { "" },
+    [""] = { "Gold Experience", "Whitesnake" },
+    [""] = { "XE", "YEID" },
 }
 
 -- [[ 2. SETUP & DATA ]]
@@ -55,38 +55,52 @@ local function updateWebhook(standName, status)
     end
 end
 
--- [[ 4. STABLE SERVER HOP ]]
-local function serverHop()
-    print("🔄 ของหมด! วนลูปหาเซิร์ฟเวอร์ใหม่...")
-    local api_url = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
-    while task.wait(5) do
-        local success, result = pcall(function() return HttpService:JSONDecode(game:HttpGet(api_url)).data end)
-        if success and result then
-            for _, s in ipairs(result) do
-                if s.id ~= game.JobId and s.playing < s.maxPlayers then
-                    print("🚀 กำลังวาร์ปไป: " .. s.id)
-                    TeleportService:TeleportToPlaceInstance(game.PlaceId, s.id, player)
+-- [[ 4. ADVANCED SERVER HOP (With Cursor Loop) ]]
+local function hopServer()
+    print("🔄 เริ่มต้นการหาเซิร์ฟเวอร์ใหม่ (Cursor Mode)...")
+    local cursor = nil
+    local currentJobId = game.JobId
+
+    repeat
+        local url = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
+        if cursor then url = url .. "&cursor=" .. cursor end
+
+        local success, result = pcall(function()
+            return HttpService:JSONDecode(game:HttpGet(url))
+        end)
+
+        if success and result and result.data then
+            for _, server in ipairs(result.data) do
+                if server.playing < server.maxPlayers and server.id ~= currentJobId then
+                    print("🚀 เจอเซิร์ฟเวอร์ว่าง! กำลังวาร์ปไปที่:", server.id)
+                    TeleportService:TeleportToPlaceInstance(game.PlaceId, server.id, player)
+                    task.wait(2) -- รอให้ระบบวาร์ปทำงาน
                 end
             end
+            cursor = result.nextPageCursor
+        else
+            warn("⚠️ ไม่สามารถดึงรายชื่อเซิร์ฟเวอร์ได้ กำลังลองใหม่ใน 5 วินาที...")
+            task.wait(5)
         end
-    end
+    until not cursor
+    print("❌ ไม่พบเซิร์ฟเวอร์ที่ว่างในขณะนี้")
 end
 
 -- [[ 5. MAIN LOGIC ]]
-print("🎬 เริ่มระบบ (Reliable Start Mode)...")
+print("🎬 ระบบเริ่มทำงาน...")
 
--- *** STEP 1: ลูป Summon จนกว่าค่าจะไม่ใช่ None ***
+-- *** ขั้นตอนที่ 1: Summon จนกว่าจะได้ค่า Stand ***
 local currentStand = "None"
 repeat
-    print("⏳ พยายามเรียกแสตนด์เพื่อเช็คค่า...")
+    print("⏳ พยายามเรียกแสตนด์เพื่อเช็คค่าปัจจุบัน...")
     pcall(function() player.Character.client_character_controller.SummonStand:FireServer() end)
-    task.wait(4) -- เวลารอแอนิเมชันและ Attribute อัปเดต
+    task.wait(4)
     currentStand = workspace.Live[player.Name]:GetAttribute("SummonedStand") or "None"
 until currentStand ~= "None"
 
-print("✅ ตรวจสอบสำเร็จ! แสตนด์ปัจจุบันคือ: " .. currentStand)
+print("✅ ยืนยันแสตนด์ปัจจุบันคือ: " .. currentStand)
 
--- *** STEP 2: เข้าลูปทำงานหลัก ***
+-- *** ขั้นตอนที่ 2: ลูปทำงานหลัก ***
 while task.wait(3) do
     currentStand = workspace.Live[player.Name]:GetAttribute("SummonedStand") or "None"
     local targets = USER_LIST[player.Name] or { "Whitesnake" }
@@ -97,7 +111,7 @@ while task.wait(3) do
     updateWebhook(currentStand, found and "SUCCESS" or "ROLLING")
     if found then print("🎉 ภารกิจสำเร็จ!") break end
 
-    -- เก็บของ
+    -- เก็บลูกธนูรื้อแมพ
     for _, item in ipairs(workspace:GetDescendants()) do
         if (item.Name == "Stand Arrow" or item.Name == "Lucky Arrow") and item:FindFirstChildOfClass("ProximityPrompt") then
             local root = player.Character:FindFirstChild("HumanoidRootPart")
@@ -110,7 +124,7 @@ while task.wait(3) do
         end
     end
 
-    -- เช็คไอเทมเพื่อสุ่ม
+    -- เช็คกระเป๋าเพื่อเริ่มสุ่ม
     local arrow = player.PlayerGui.Inventory.CanvasGroup.backpack_frame.enlarging_frame.holder:FindFirstChild("Stand Arrow")
     local amount = arrow and tonumber(arrow.Holder.Holder.Number.Text:match("%d+")) or 0
     
@@ -122,14 +136,14 @@ while task.wait(3) do
         ReplicatedStorage.requests.character.use_item:FireServer("Stand Arrow")
         task.wait(8)
         
-        -- ลูป Summon หลังสุ่มเพื่อให้แน่ใจว่าได้ค่าใหม่
+        -- บังคับ Summon ใหม่หลังสุ่มเพื่ออัปเดตค่า
         repeat
             pcall(function() player.Character.client_character_controller.SummonStand:FireServer() end)
             task.wait(4)
             currentStand = workspace.Live[player.Name]:GetAttribute("SummonedStand") or "None"
         until currentStand ~= "None"
     else
-        serverHop()
+        hopServer() -- ใช้ระบบ Hop ตัวใหม่ที่คุณส่งมา
         break
     end
 end
