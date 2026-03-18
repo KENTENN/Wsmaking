@@ -21,14 +21,14 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
 
--- [[ 3. WEBHOOK SYSTEM (Edit Mode) ]]
+-- [[ 3. WEBHOOK SYSTEM ]]
 local function updateWebhook(standName, status)
     if not WEBHOOK_URL:find("https://") then return end
     local targets = USER_LIST[player.Name] or { "Whitesnake" }
     
     local data = {
         ["embeds"] = {{
-            ["title"] = "✨ Gacha Monitor - Multi-Target Mode",
+            ["title"] = "✨ Gacha Monitor Status",
             ["description"] = "Account: ||" .. player.Name .. "||",
             ["color"] = (status == "SUCCESS") and 65280 or 16744448,
             ["fields"] = {
@@ -55,41 +55,50 @@ local function updateWebhook(standName, status)
     end
 end
 
--- [[ 4. ADVANCED SERVER HOP (With Cursor Loop) ]]
+-- [[ 4. INFINITE SERVER HOP (แก้ไขจุดที่ค้าง) ]]
 local function hopServer()
-    print("🔄 เริ่มต้นการหาเซิร์ฟเวอร์ใหม่ (Cursor Mode)...")
-    local cursor = nil
-    local currentJobId = game.JobId
+    print("🔄 เริ่มต้นการหาเซิร์ฟเวอร์ใหม่...")
+    
+    while task.wait() do -- วนลูปใหญ่เพื่อให้หาใหม่ได้เรื่อยๆ ถ้ายังไม่สำเร็จ
+        local cursor = nil
+        local currentJobId = game.JobId
 
-    repeat
-        local url = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
-        if cursor then url = url .. "&cursor=" .. cursor end
+        repeat
+            local url = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
+            if cursor then url = url .. "&cursor=" .. cursor end
 
-        local success, result = pcall(function()
-            return HttpService:JSONDecode(game:HttpGet(url))
-        end)
+            local success, result = pcall(function()
+                return HttpService:JSONDecode(game:HttpGet(url))
+            end)
 
-        if success and result and result.data then
-            for _, server in ipairs(result.data) do
-                if server.playing < server.maxPlayers and server.id ~= currentJobId then
-                    print("🚀 เจอเซิร์ฟเวอร์ว่าง! กำลังวาร์ปไปที่:", server.id)
-                    TeleportService:TeleportToPlaceInstance(game.PlaceId, server.id, player)
-                    task.wait(2) -- รอให้ระบบวาร์ปทำงาน
+            if success and result and result.data then
+                for _, server in ipairs(result.data) do
+                    -- เช็คเซิร์ฟเวอร์ที่คนไม่เต็ม และไม่ใช่เซิร์ฟเวอร์เดิม
+                    if server.playing < server.maxPlayers and server.id ~= currentJobId then
+                        print("🚀 พยายามวาร์ปไปเซิร์ฟเวอร์:", server.id)
+                        local tele_success, _ = pcall(function()
+                            TeleportService:TeleportToPlaceInstance(game.PlaceId, server.id, player)
+                        end)
+                        task.wait(2) -- ดีเลย์กันรัว
+                        if tele_success then return end -- ถ้าสำเร็จให้หยุดลูป
+                    end
                 end
+                cursor = result.nextPageCursor
+            else
+                print("⚠️ API Error หรือหาไม่เจอ รอ 5 วิ...")
+                task.wait(5)
             end
-            cursor = result.nextPageCursor
-        else
-            warn("⚠️ ไม่สามารถดึงรายชื่อเซิร์ฟเวอร์ได้ กำลังลองใหม่ใน 5 วินาที...")
-            task.wait(5)
-        end
-    until not cursor
-    print("❌ ไม่พบเซิร์ฟเวอร์ที่ว่างในขณะนี้")
+        until not cursor
+        
+        print("❌ วนหาจนจบหน้าสุดท้ายแล้วยังไม่เจอ... กำลังเริ่มหาใหม่จากหน้าแรกใน 5 วินาที")
+        task.wait(5) -- รอสักพักก่อนเริ่มหาหน้าแรกใหม่ เพื่อลดการติด Rate Limit
+    end
 end
 
 -- [[ 5. MAIN LOGIC ]]
 print("🎬 ระบบเริ่มทำงาน...")
 
--- *** ขั้นตอนที่ 1: Summon จนกว่าจะได้ค่า Stand ***
+-- Summon จนกว่าจะได้ค่า Stand
 local currentStand = "None"
 repeat
     print("⏳ พยายามเรียกแสตนด์เพื่อเช็คค่าปัจจุบัน...")
@@ -100,7 +109,6 @@ until currentStand ~= "None"
 
 print("✅ ยืนยันแสตนด์ปัจจุบันคือ: " .. currentStand)
 
--- *** ขั้นตอนที่ 2: ลูปทำงานหลัก ***
 while task.wait(3) do
     currentStand = workspace.Live[player.Name]:GetAttribute("SummonedStand") or "None"
     local targets = USER_LIST[player.Name] or { "Whitesnake" }
@@ -111,7 +119,7 @@ while task.wait(3) do
     updateWebhook(currentStand, found and "SUCCESS" or "ROLLING")
     if found then print("🎉 ภารกิจสำเร็จ!") break end
 
-    -- เก็บลูกธนูรื้อแมพ
+    -- ฟังก์ชันเก็บของ
     for _, item in ipairs(workspace:GetDescendants()) do
         if (item.Name == "Stand Arrow" or item.Name == "Lucky Arrow") and item:FindFirstChildOfClass("ProximityPrompt") then
             local root = player.Character:FindFirstChild("HumanoidRootPart")
@@ -124,7 +132,6 @@ while task.wait(3) do
         end
     end
 
-    -- เช็คกระเป๋าเพื่อเริ่มสุ่ม
     local arrow = player.PlayerGui.Inventory.CanvasGroup.backpack_frame.enlarging_frame.holder:FindFirstChild("Stand Arrow")
     local amount = arrow and tonumber(arrow.Holder.Holder.Number.Text:match("%d+")) or 0
     
@@ -136,14 +143,13 @@ while task.wait(3) do
         ReplicatedStorage.requests.character.use_item:FireServer("Stand Arrow")
         task.wait(8)
         
-        -- บังคับ Summon ใหม่หลังสุ่มเพื่ออัปเดตค่า
         repeat
             pcall(function() player.Character.client_character_controller.SummonStand:FireServer() end)
             task.wait(4)
             currentStand = workspace.Live[player.Name]:GetAttribute("SummonedStand") or "None"
         until currentStand ~= "None"
     else
-        hopServer() -- ใช้ระบบ Hop ตัวใหม่ที่คุณส่งมา
+        hopServer() -- จะวนหาไปเรื่อยๆ จนกว่าจะวาร์ปออกสำเร็จ
         break
     end
 end
